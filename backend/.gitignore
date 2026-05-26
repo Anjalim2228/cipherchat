@@ -1,0 +1,16 @@
+# Environment variables - NEVER commit
+.env
+.env.*
+!.env.example
+
+# Dependencies
+node_modules/
+
+# Compiled output
+dist/
+
+# TypeScript cache
+*.tsbuildinfo
+
+# Logs
+*.log
