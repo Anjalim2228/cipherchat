@@ -1,16 +1,22 @@
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider } from './context/AuthContext';
+import LoginPage from './pages/LoginPage';
+import RegisterPage from './pages/RegisterPage';
+import ChatPage from './pages/ChatPage';
+
 function App() {
   return (
-    <div className="min-h-screen bg-[#0e0e17] flex items-center justify-center">
-      <div className="text-center">
-        <h1 className="text-5xl font-bold text-[#6270f3] mb-4">
-          CipherChat
-        </h1>
-        <p className="text-gray-400 text-lg">
-          Secure. Fast. Beautiful.
-        </p>
-      </div>
-    </div>
-  )
+    <BrowserRouter>
+      <AuthProvider>
+        <Routes>
+          <Route path="/" element={<Navigate to="/login" />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
+          <Route path="/chat" element={<ChatPage />} />
+        </Routes>
+      </AuthProvider>
+    </BrowserRouter>
+  );
 }
 
-export default App
+export default App;
