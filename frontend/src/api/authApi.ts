@@ -19,3 +19,17 @@ export const registerApi = async (credentials: RegisterCredentials): Promise<Aut
   const response = await api.post('/auth/register', credentials);
   return response.data;
 };
+
+export const getUsersApi = async (token: string) => {
+  const response = await api.get('/messages/users', {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  return response.data;
+};
+
+export const getMessagesApi = async (userId: string, token: string) => {
+  const response = await api.get(`/messages/${userId}`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  return response.data;
+};
