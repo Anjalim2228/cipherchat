@@ -66,15 +66,16 @@ export const initializeSocket = (io: Server) => {
         const populatedMessage = await Message.findById(newMessage._id)
           .populate('sender', 'username avatar')
           .populate('receiver', 'username avatar');
+            // Send to receiver if online
+            const receiverSocketId = onlineUsers.get(data.receiverId);
+            if (receiverSocketId) {
+              io.to(receiverSocketId).emit('receiveMessage', populatedMessage);
+            }
 
-        // Send to receiver if online
-        const receiverSocketId = onlineUsers.get(data.receiverId);
-        if (receiverSocketId) {
-          io.to(receiverSocketId).emit('receiveMessage', populatedMessage);
-        }
+            // Send back to sender too
+            socket.emit('receiveMessage', populatedMessage);
 
-        // Send back to sender (confirmation)
-        socket.emit('messageSent', populatedMessage);
+        
 
       } catch (error) {
         socket.emit('error', { message: 'Failed to send message' });

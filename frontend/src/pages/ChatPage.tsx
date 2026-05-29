@@ -57,21 +57,24 @@ const ChatPage = () => {
 
       // KEY FIX — use setSelectedUser to read latest state
       socket.on('receiveMessage', (message: Message) => {
-        setSelectedUser((currentSelected) => {
-          if (
-            currentSelected &&
-            (message.sender._id === currentSelected._id ||
-              message.receiver._id === currentSelected._id)
-          ) {
-            setMessages((prev) => [...prev, message]);
-          }
-          return currentSelected;
-        });
+  setSelectedUser((currentSelected) => {
+    if (
+      currentSelected &&
+      (message.sender._id === currentSelected._id ||
+        message.receiver._id === currentSelected._id)
+    ) {
+      setMessages((prev) => {
+        // Prevent duplicate messages
+        const exists = prev.some((m) => m._id === message._id);
+        if (exists) return prev;
+        return [...prev, message];
       });
+    }
+    return currentSelected;
+  });
+});
 
-      socket.on('messageSent', (message: Message) => {
-        setMessages((prev) => [...prev, message]);
-      });
+     
 
       socket.on('userTyping', (data: { userId: string }) => {
         setTypingUsers((prev) => [...new Set([...prev, data.userId])]);
