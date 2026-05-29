@@ -56,7 +56,7 @@ const ChatPage = () => {
       });
 
       // KEY FIX — use setSelectedUser to read latest state
-      socket.on('receiveMessage', (message: Message) => {
+     socket.on('receiveMessage', (message: Message) => {
   setSelectedUser((currentSelected) => {
     if (
       currentSelected &&
@@ -174,6 +174,8 @@ const ChatPage = () => {
 
   // Fix sent/received detection
   const currentUserId = (user as any)?._id || (user as any)?.id;
+
+  console.log('USER:', JSON.stringify(user));
 
   return (
     <div className="h-screen flex overflow-hidden bg-[#0a0015]">
