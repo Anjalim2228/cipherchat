@@ -32,6 +32,7 @@ const ChatPage = () => {
   const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState('All');
+  const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({}); 
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -56,7 +57,8 @@ const ChatPage = () => {
       });
 
       // KEY FIX — use setSelectedUser to read latest state
-     socket.on('receiveMessage', (message: Message) => {
+    socket.on('receiveMessage', (message: Message) => {
+      console.log('RECEIVE EVENT:', message.sender._id, 'MY ID:', (user as any)?.id);
   setSelectedUser((currentSelected) => {
     if (
       currentSelected &&
@@ -64,16 +66,23 @@ const ChatPage = () => {
         message.receiver._id === currentSelected._id)
     ) {
       setMessages((prev) => {
-        // Prevent duplicate messages
         const exists = prev.some((m) => m._id === message._id);
         if (exists) return prev;
         return [...prev, message];
       });
+    } else {
+      const senderId = message.sender._id;
+      const myId = (user as any)?.id || (user as any)?._id;
+      if (senderId !== myId) {
+        setUnreadCounts((prev) => ({
+          ...prev,
+          [senderId]: (prev[senderId] || 0) + 1,
+        }));
+      }
     }
     return currentSelected;
   });
 });
-
      
 
       socket.on('userTyping', (data: { userId: string }) => {
@@ -246,7 +255,10 @@ const ChatPage = () => {
           {users.map((u) => (
             <div
               key={u._id}
-              onClick={() => setSelectedUser(u)}
+              onClick={() => {
+  setSelectedUser(u);
+  setUnreadCounts((prev) => ({ ...prev, [u._id]: 0 }));
+}}
               className={`flex items-center gap-3 px-2 py-2.5 rounded-xl cursor-pointer transition-all ${
                 selectedUser?._id === u._id
                   ? 'bg-purple-500/15 border border-purple-500/25'
@@ -262,13 +274,20 @@ const ChatPage = () => {
                 )}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-white truncate">
-                  {u.username}
-                </p>
-                <p className={`text-xs ${isOnline(u._id) ? 'text-green-400' : 'text-gray-600'}`}>
-                  {isOnline(u._id) ? 'Online' : 'Offline'}
-                </p>
-              </div>
+  <div className="flex items-center justify-between">
+    <p className="text-sm font-medium text-white truncate">
+      {u.username}
+    </p>
+    {unreadCounts[u._id] > 0 && (
+      <span className="shrink-0 min-w-5 h-5 px-1 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 text-white text-xs flex items-center justify-center font-bold">
+        {unreadCounts[u._id] > 9 ? '9+' : unreadCounts[u._id]}
+      </span>
+    )}
+  </div>
+  <p className={`text-xs ${isOnline(u._id) ? 'text-green-400' : 'text-gray-600'}`}>
+    {isOnline(u._id) ? 'Online' : 'Offline'}
+  </p>
+</div>
             </div>
           ))}
         </div>
