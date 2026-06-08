@@ -2,7 +2,6 @@ import { Server, Socket } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import Message from '../models/Message';
 import User from '../models/User';
-import Group from '../models/Group';
 
 // Store online users: userId -> socketId
 const onlineUsers = new Map<string, string>();
@@ -49,18 +48,13 @@ export const initializeSocket = (io: Server) => {
     // Broadcast online users list to everyone
     io.emit('onlineUsers', Array.from(onlineUsers.keys()));
 
-    // ─── Join all group rooms this user belongs to ──
-    const userGroups = await Group.find({ members: userId });
-    userGroups.forEach((group) => {
-      socket.join(`group:${group._id}`);
-    });
-
-    // ─── Send Direct Message ────────────────────────
+    // ─── Send Message ──────────────────────────────
     socket.on('sendMessage', async (data: {
       receiverId: string;
       message: string;
     }) => {
       try {
+        // Save message to MongoDB
         const newMessage = await Message.create({
           sender: userId,
           receiver: data.receiverId,
@@ -68,15 +62,19 @@ export const initializeSocket = (io: Server) => {
           messageType: 'text',
         });
 
+        // Populate sender and receiver info
         const populatedMessage = await Message.findById(newMessage._id)
           .populate('sender', 'username avatar')
           .populate('receiver', 'username avatar');
 
+        // FIX: Send to receiver ONLY via receiveMessage event
         const receiverSocketId = onlineUsers.get(data.receiverId);
         if (receiverSocketId) {
           io.to(receiverSocketId).emit('receiveMessage', populatedMessage);
         }
 
+        // FIX: Send back to sender ONLY via messageSent event
+        // This way sender gets exactly ONE event per message sent
         socket.emit('messageSent', populatedMessage);
 
       } catch (error) {
@@ -84,53 +82,7 @@ export const initializeSocket = (io: Server) => {
       }
     });
 
-    // ─── Send Group Message ─────────────────────────
-    socket.on('sendGroupMessage', async (data: {
-      groupId: string;
-      message: string;
-    }) => {
-      try {
-        // Verify user is a member of this group
-        const group = await Group.findById(data.groupId);
-        if (!group) {
-          socket.emit('error', { message: 'Group not found' });
-          return;
-        }
-
-        const isMember = group.members.some(
-          (memberId) => memberId.toString() === userId
-        );
-        if (!isMember) {
-          socket.emit('error', { message: 'You are not a member of this group' });
-          return;
-        }
-
-        // Save message to DB
-        const newMessage = await Message.create({
-          sender: userId,
-          group: data.groupId,
-          message: data.message,
-          messageType: 'text',
-        });
-
-        const populatedMessage = await Message.findById(newMessage._id)
-          .populate('sender', 'username avatar')
-          .populate('group', 'name');
-
-        // Emit to all members in the group room (including sender)
-        io.to(`group:${data.groupId}`).emit('receiveGroupMessage', populatedMessage);
-
-      } catch (error) {
-        socket.emit('error', { message: 'Failed to send group message' });
-      }
-    });
-
-    // ─── Join Group Room (when group is created/user added) ─
-    socket.on('joinGroup', (data: { groupId: string }) => {
-      socket.join(`group:${data.groupId}`);
-    });
-
-    // ─── Typing Indicator (DM) ──────────────────────
+    // ─── Typing Indicator ─────────────────────────
     socket.on('typing', (data: { receiverId: string }) => {
       const receiverSocketId = onlineUsers.get(data.receiverId);
       if (receiverSocketId) {
@@ -141,7 +93,7 @@ export const initializeSocket = (io: Server) => {
       }
     });
 
-    // ─── Stop Typing (DM) ──────────────────────────
+    // ─── Stop Typing ──────────────────────────────
     socket.on('stopTyping', (data: { receiverId: string }) => {
       const receiverSocketId = onlineUsers.get(data.receiverId);
       if (receiverSocketId) {
@@ -149,24 +101,7 @@ export const initializeSocket = (io: Server) => {
       }
     });
 
-    // ─── Typing Indicator (Group) ───────────────────
-    socket.on('groupTyping', (data: { groupId: string }) => {
-      socket.to(`group:${data.groupId}`).emit('groupUserTyping', {
-        userId,
-        username: socket.user.username,
-        groupId: data.groupId,
-      });
-    });
-
-    // ─── Stop Typing (Group) ───────────────────────
-    socket.on('groupStopTyping', (data: { groupId: string }) => {
-      socket.to(`group:${data.groupId}`).emit('groupUserStopTyping', {
-        userId,
-        groupId: data.groupId,
-      });
-    });
-
-    // ─── Mark Messages as Read ─────────────────────
+    // ─── Mark Messages as Read ────────────────────
     socket.on('markAsRead', async (data: { senderId: string }) => {
       await Message.updateMany(
         { sender: data.senderId, receiver: userId, isRead: false },
@@ -179,7 +114,7 @@ export const initializeSocket = (io: Server) => {
       }
     });
 
-    // ─── Disconnect ────────────────────────────────
+    // ─── Disconnect ───────────────────────────────
     socket.on('disconnect', async () => {
       console.log(`❌ User disconnected: ${socket.user.username}`);
       onlineUsers.delete(userId);
