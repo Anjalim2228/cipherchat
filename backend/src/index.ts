@@ -7,6 +7,7 @@ import dotenv from 'dotenv';
 import connectDB from './config/database';
 import authRoutes from './routes/authRoutes';
 import messageRoutes from './routes/messageRoutes';
+import groupRoutes from './routes/groupRoutes';
 import { initializeSocket } from './sockets/socketHandler';
 
 dotenv.config();
@@ -36,6 +37,7 @@ app.use(express.json());
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/messages', messageRoutes);
+app.use('/api/groups', groupRoutes);
 
 // Health check
 app.get('/api/health', (req: Request, res: Response) => {

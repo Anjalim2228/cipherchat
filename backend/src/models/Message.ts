@@ -2,7 +2,8 @@ import mongoose, { Document, Schema } from 'mongoose';
 
 export interface IMessage extends Document {
   sender: mongoose.Types.ObjectId;
-  receiver: mongoose.Types.ObjectId;
+  receiver?: mongoose.Types.ObjectId;   // null for group messages
+  group?: mongoose.Types.ObjectId;      // null for direct messages
   message: string;
   messageType: 'text' | 'image' | 'file';
   isRead: boolean;
@@ -19,7 +20,12 @@ const MessageSchema = new Schema<IMessage>(
     receiver: {
       type: Schema.Types.ObjectId,
       ref: 'User',
-      required: true,
+      default: null,
+    },
+    group: {
+      type: Schema.Types.ObjectId,
+      ref: 'Group',
+      default: null,
     },
     message: {
       type: String,
