@@ -5,18 +5,30 @@ import { initializeSocket, getSocket } from '../socket/socket';
 import { getUsersApi, getMessagesApi } from '../api/authApi';
 
 interface User {
-  _id: string; username: string; email: string; avatar?: string; isOnline?: boolean;
+  _id: string;
+  username: string;
+  email: string;
+  avatar?: string;
+  isOnline?: boolean;
 }
+
 interface Message {
   _id: string;
   sender: { _id: string; username: string };
   receiver: { _id: string; username: string };
-  message: string; createdAt: string; isRead: boolean;
+  message: string;
+  createdAt: string;
+  isRead: boolean;
 }
+
 type CallState = 'idle' | 'calling' | 'incoming' | 'connected';
 type ActivePanel = 'none' | 'settings' | 'notifications';
 
-const avatarColors = ['#c0392b','#e74c3c','#a93226','#922b21','#cb4335','#b03a2e','#d45252','#8e1f1f'];
+const avatarColors = [
+  '#A88F6A', '#8E94A3', '#6F7785', '#B39B7B',
+  '#7D8A96', '#9C8F7A', '#5E6876', '#A6A9B2'
+];
+
 const getAvatarColor = (name: string) => {
   let hash = 0;
   for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
@@ -24,7 +36,7 @@ const getAvatarColor = (name: string) => {
 };
 
 const fakeNotifications = [
-  { id: '1', text: 'New user joined CipherChat', time: '2m ago', read: false },
+  { id: '1', text: 'New user joined the workspace', time: '2m ago', read: false },
   { id: '2', text: 'Secure connection established', time: '1h ago', read: false },
   { id: '3', text: 'End-to-end encryption active', time: '3h ago', read: true },
 ];
@@ -39,6 +51,7 @@ const ICE_SERVERS = {
 const ChatPage = () => {
   const { user, token, logout } = useAuth();
   const navigate = useNavigate();
+
   const [users, setUsers] = useState<User[]>([]);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -50,12 +63,23 @@ const ChatPage = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [activePanel, setActivePanel] = useState<ActivePanel>('none');
   const [notifications, setNotifications] = useState(fakeNotifications);
-  const [settings, setSettings] = useState({ notifications: true, sounds: true, encryption: true, readReceipts: true, fontSize: 'medium' });
+  const [settings, setSettings] = useState({
+    notifications: true,
+    sounds: true,
+    encryption: true,
+    readReceipts: true,
+    fontSize: 'medium'
+  });
 
   const [callState, setCallState] = useState<CallState>('idle');
   const [callType, setCallType] = useState<'audio' | 'video'>('audio');
   const [callDuration, setCallDuration] = useState(0);
-  const [incomingCallData, setIncomingCallData] = useState<{ fromUserId: string; callerName: string; callType: 'audio' | 'video'; offer: RTCSessionDescriptionInit } | null>(null);
+  const [incomingCallData, setIncomingCallData] = useState<{
+    fromUserId: string;
+    callerName: string;
+    callType: 'audio' | 'video';
+    offer: RTCSessionDescriptionInit;
+  } | null>(null);
   const [isMuted, setIsMuted] = useState(false);
   const [isCameraOff, setIsCameraOff] = useState(false);
 
@@ -75,15 +99,24 @@ const ChatPage = () => {
 
   const fetchUsers = useCallback(async () => {
     if (!token) return;
-    try { const data = await getUsersApi(token); setUsers(data.users); } catch (e) { console.error(e); }
+    try {
+      const data = await getUsersApi(token);
+      setUsers(data.users);
+    } catch (e) {
+      console.error(e);
+    }
   }, [token]);
+
   useEffect(() => { fetchUsers(); }, [fetchUsers]);
 
   const createPeerConnection = useCallback((remoteUserId: string) => {
     const pc = new RTCPeerConnection(ICE_SERVERS);
     peerConnectionRef.current = pc;
     pc.onicecandidate = (e) => {
-      if (e.candidate) { const socket = getSocket(); socket?.emit('call:ice-candidate', { toUserId: remoteUserId, candidate: e.candidate }); }
+      if (e.candidate) {
+        const socket = getSocket();
+        socket?.emit('call:ice-candidate', { toUserId: remoteUserId, candidate: e.candidate });
+      }
     };
     pc.ontrack = (e) => { if (remoteVideoRef.current) remoteVideoRef.current.srcObject = e.streams[0]; };
     pc.onconnectionstatechange = () => {
@@ -98,7 +131,10 @@ const ChatPage = () => {
       localStreamRef.current = stream;
       if (localVideoRef.current) localVideoRef.current.srcObject = stream;
       return stream;
-    } catch (e) { console.error('Could not get media:', e); return null; }
+    } catch (e) {
+      console.error('Could not get media:', e);
+      return null;
+    }
   };
 
   const startCallTimer = () => {
@@ -162,7 +198,10 @@ const ChatPage = () => {
 
   const endCall = () => {
     const targetId = incomingCallData?.fromUserId || selectedUser?._id;
-    if (targetId) { const socket = getSocket(); socket?.emit('call:end', { toUserId: targetId }); }
+    if (targetId) {
+      const socket = getSocket();
+      socket?.emit('call:end', { toUserId: targetId });
+    }
     cleanupCall();
   };
 
@@ -194,12 +233,8 @@ const ChatPage = () => {
       socket.on('messageSent', (msg: Message) => {
         setMessages(prev => prev.some(m => m._id === msg._id) ? prev : [...prev, msg]);
       });
-      socket.on('userTyping', (data: { userId: string }) => {
-        setTypingUsers(prev => [...new Set([...prev, data.userId])]);
-      });
-      socket.on('userStopTyping', (data: { userId: string }) => {
-        setTypingUsers(prev => prev.filter(id => id !== data.userId));
-      });
+      socket.on('userTyping', (data: { userId: string }) => { setTypingUsers(prev => [...new Set([...prev, data.userId])]); });
+      socket.on('userStopTyping', (data: { userId: string }) => { setTypingUsers(prev => prev.filter(id => id !== data.userId)); });
       socket.on('call:incoming', (data: any) => { setIncomingCallData(data); setCallState('incoming'); });
       socket.on('call:answered', async (data: { answer: RTCSessionDescriptionInit }) => {
         await peerConnectionRef.current?.setRemoteDescription(new RTCSessionDescription(data.answer));
@@ -207,10 +242,10 @@ const ChatPage = () => {
         startCallTimer();
       });
       socket.on('call:ice-candidate', async (data: { candidate: RTCIceCandidateInit }) => {
-        try { await peerConnectionRef.current?.addIceCandidate(new RTCIceCandidate(data.candidate)); } catch (e) {}
+        try { await peerConnectionRef.current?.addIceCandidate(new RTCIceCandidate(data.candidate)); } catch {}
       });
-      socket.on('call:rejected', () => { cleanupCall(); });
-      socket.on('call:ended', () => { cleanupCall(); });
+      socket.on('call:rejected', () => cleanupCall());
+      socket.on('call:ended', () => cleanupCall());
     }, 100);
     return () => clearTimeout(timer);
   }, [token, fetchUsers]);
@@ -240,14 +275,19 @@ const ChatPage = () => {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(); }
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
+    }
   };
 
   const formatTime = (d: string) => new Date(d).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   const formatDate = (d: string) => {
-    const date = new Date(d); const today = new Date();
+    const date = new Date(d);
+    const today = new Date();
     const diff = today.getDate() - date.getDate();
-    if (diff === 0) return 'Today'; if (diff === 1) return 'Yesterday';
+    if (diff === 0) return 'Today';
+    if (diff === 1) return 'Yesterday';
     return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
   };
   const formatDur = (s: number) => `${Math.floor(s / 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`;
@@ -260,7 +300,8 @@ const ChatPage = () => {
   const groupedMessages = messages.reduce((acc, msg) => {
     const key = formatDate(msg.createdAt);
     if (!acc[key]) acc[key] = [];
-    acc[key].push(msg); return acc;
+    acc[key].push(msg);
+    return acc;
   }, {} as Record<string, Message[]>);
   const unreadNotifCount = notifications.filter(n => !n.read).length;
   const togglePanel = (p: ActivePanel) => setActivePanel(prev => prev === p ? 'none' : p);
@@ -268,342 +309,745 @@ const ChatPage = () => {
   const callPartner = callState === 'incoming' ? callerUser : selectedUser;
 
   return (
-    <div className="h-screen flex overflow-hidden" style={{ fontFamily: "'Syne', 'Space Grotesk', sans-serif", background: '#070709' }}>
+    <div className="app-root" style={{ fontFamily: "'Inter', 'DM Sans', sans-serif" }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap');
-        * { box-sizing: border-box; }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap');
 
-        /* ── COLOUR TOKENS ── */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
         :root {
-          --bg-void:    #070709;
-          --bg-base:    #0d0d0f;
-          --bg-surface: #111114;
-          --bg-raised:  #18181c;
-          --bg-hover:   #1e1e23;
+          --bg-app: #070707;
+          --bg-surface: rgba(21, 21, 21, 0.86);
+          --bg-elevated: rgba(28, 28, 28, 0.94);
+          --bg-hover: rgba(38, 38, 38, 0.98);
+          --bg-active: rgba(46, 46, 46, 1);
 
-          --red-deep:   #8b0000;
-          --red-core:   #c0181a;
-          --red-bright: #e8222a;
-          --red-hot:    #ff3b44;
+          --accent: #c2a772;
+          --accent-2: #d8c7a6;
+          --accent-dim: rgba(194, 167, 114, 0.15);
+          --accent-glow: rgba(194, 167, 114, 0.10);
 
-          --chrome-dim: #5a5a6a;
-          --chrome-mid: #9090a8;
-          --chrome-hi:  #d0d0e8;
-          --chrome-pure:#f0f0ff;
+          --green: #9bc2a4;
+          --green-dim: rgba(155, 194, 164, 0.14);
+          --red: #d28c8c;
+          --red-dim: rgba(210, 140, 140, 0.14);
 
-          --grad-red:   linear-gradient(135deg, #8b0000 0%, #e8222a 50%, #ff6b35 100%);
-          --grad-chrome:linear-gradient(135deg, #3a3a50 0%, #9090a8 50%, #d0d0e8 100%);
-          --grad-card:  linear-gradient(160deg, #161618 0%, #0d0d10 100%);
+          --text-primary: #f4f1eb;
+          --text-secondary: #c6c0b8;
+          --text-muted: #8e8780;
+          --text-disabled: #625d57;
 
-          --border-dim:    #ffffff08;
-          --border-mid:    #ffffff14;
-          --border-accent: #c0181a30;
-          --border-hot:    #e8222a55;
+          --border: rgba(255, 255, 255, 0.07);
+          --border-mid: rgba(255, 255, 255, 0.12);
+          --border-focus: rgba(194, 167, 114, 0.32);
 
-          --text-primary:  #f0f0f8;
-          --text-secondary:#9090a8;
-          --text-muted:    #4a4a5a;
-          --text-red:      #ff5058;
+          --shadow-sm: 0 1px 2px rgba(0,0,0,0.35);
+          --shadow-md: 0 10px 30px rgba(0,0,0,0.42);
+          --shadow-lg: 0 24px 80px rgba(0,0,0,0.65);
+          --shadow-accent: 0 10px 30px rgba(194,167,114,0.16);
         }
 
-        ::-webkit-scrollbar { width: 2px; }
+        .app-root {
+          height: 100vh;
+          display: flex;
+          overflow: hidden;
+          color: var(--text-primary);
+          background:
+            radial-gradient(circle at 15% 10%, rgba(194,167,114,0.08), transparent 22%),
+            radial-gradient(circle at 85% 18%, rgba(216,199,166,0.05), transparent 18%),
+            linear-gradient(135deg, #050505 0%, #0a0a0a 50%, #080808 100%);
+        }
+
+        ::-webkit-scrollbar { width: 4px; height: 4px; }
         ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: var(--red-deep); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.10); border-radius: 999px; }
 
-        @keyframes pulse-ring {
-          0%   { transform: scale(0.8); opacity: 1; }
-          100% { transform: scale(2.4); opacity: 0; }
-        }
-        @keyframes bounce-dot {
-          0%, 60%, 100% { transform: translateY(0); }
-          30%           { transform: translateY(-5px); }
-        }
-        @keyframes slide-in {
-          from { opacity: 0; transform: translateY(6px); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes shimmer {
-          0%   { background-position: -200% center; }
-          100% { background-position:  200% center; }
-        }
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes pulse-ring { 0% { transform: scale(1); opacity: 0.45; } 100% { transform: scale(2.2); opacity: 0; } }
+        @keyframes shimmer-in { from { opacity: 0; transform: scale(0.98); } to { opacity: 1; transform: scale(1); } }
+        .msg-bubble { animation: fadeUp 0.18s ease-out; }
 
-        .msg-bubble { animation: slide-in 0.18s ease-out; }
-
-        .user-row {
-          display: flex; align-items: center; gap: 10px;
-          padding: 9px 10px; border-radius: 10px; cursor: pointer;
-          border: 1px solid transparent; transition: all 0.15s; margin-bottom: 2px;
-        }
-        .user-row:hover   { background: var(--bg-hover); border-color: var(--border-mid); }
-        .user-row.active  { background: var(--bg-raised); border-color: var(--border-accent); }
-
-        .tab-btn {
-          flex: 1; padding: 5px 0; font-size: 10px; font-weight: 700;
-          letter-spacing: 2px; border-radius: 7px; cursor: pointer;
-          border: 1px solid transparent; text-align: center;
-          color: var(--text-muted); background: transparent; transition: all 0.15s;
-          font-family: 'Space Mono', monospace;
-        }
-        .tab-btn.active {
-          background: var(--bg-raised); color: var(--red-bright);
-          border-color: var(--border-accent);
-          text-shadow: 0 0 12px var(--red-core);
+        .sidebar {
+          width: 300px;
+          min-width: 300px;
+          height: 100vh;
+          display: flex;
+          flex-direction: column;
+          background: linear-gradient(180deg, rgba(18,18,18,0.94), rgba(12,12,12,0.96));
+          border-right: 1px solid var(--border);
+          box-shadow: inset -1px 0 0 rgba(255,255,255,0.02);
         }
 
-        .ctrl-btn {
-          border: 1px solid var(--border-mid); background: var(--bg-raised);
-          color: var(--chrome-mid); border-radius: 8px; cursor: pointer;
+        .sidebar-header, .panel-header {
+          padding: 18px 16px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          border-bottom: 1px solid var(--border);
+        }
+
+        .logo-mark { display: flex; align-items: center; gap: 10px; }
+        .logo-icon {
+          width: 34px; height: 34px; border-radius: 14px;
+          background: linear-gradient(145deg, rgba(194,167,114,0.22), rgba(255,255,255,0.04));
+          border: 1px solid rgba(194,167,114,0.25);
           display: flex; align-items: center; justify-content: center;
-          transition: all 0.15s;
+          box-shadow: var(--shadow-accent);
         }
-        .ctrl-btn:hover { border-color: var(--border-hot); color: var(--red-bright); background: var(--bg-hover); }
+        .logo-text { font-size: 15px; font-weight: 800; letter-spacing: -0.5px; }
+        .logo-text span { color: var(--accent); }
 
-        .toggle-track {
-          width: 36px; height: 20px; border-radius: 10px; cursor: pointer;
-          transition: background 0.2s; position: relative; border: none;
-        }
-        .toggle-thumb {
-          position: absolute; top: 2px; width: 16px; height: 16px;
-          border-radius: 50%; transition: left 0.2s;
-        }
-
-        .send-btn-active {
-          background: var(--grad-red); border: none;
-          color: #fff; border-radius: 10px; cursor: pointer;
+        .icon-btn {
+          width: 34px; height: 34px;
+          border-radius: 14px;
+          border: 1px solid var(--border);
+          background: rgba(255,255,255,0.02);
+          color: var(--text-muted);
           display: flex; align-items: center; justify-content: center;
-          transition: all 0.15s;
+          cursor: pointer;
+          transition: .15s ease;
         }
-        .send-btn-active:hover { filter: brightness(1.15); }
-        .send-btn-inactive {
-          background: transparent; border: 1px solid var(--border-mid);
-          color: var(--text-muted); border-radius: 10px; cursor: not-allowed;
-          display: flex; align-items: center; justify-content: center;
+        .icon-btn:hover {
+          transform: translateY(-1px);
+          background: var(--bg-hover);
+          border-color: var(--border-mid);
+          color: var(--text-primary);
         }
+        .icon-btn.danger:hover { background: var(--red-dim); color: var(--red); }
 
-        .logo-text-cipher {
-          background: var(--grad-red);
-          -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-          background-clip: text; font-size: 13px; font-weight: 800; letter-spacing: 3px;
-        }
-        .logo-text-chat {
-          font-size: 13px; font-weight: 800; letter-spacing: 3px;
-          background: var(--grad-chrome);
-          -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-          background-clip: text;
-        }
-
-        .avatar-ring {
-          border-radius: 50%; display: flex; align-items: center;
-          justify-content: center; font-weight: 800; flex-shrink: 0;
-          font-family: 'Space Mono', monospace;
-        }
-
-        .online-dot {
-          position: absolute; bottom: 0; right: 0;
-          width: 9px; height: 9px; border-radius: 50%;
-          background: var(--red-bright);
-          box-shadow: 0 0 6px var(--red-core);
-          border: 2px solid var(--bg-base);
-        }
-
-        .unread-pill {
-          min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px;
-          background: var(--grad-red); color: #fff;
-          font-size: 10px; font-weight: 700;
-          display: flex; align-items: center; justify-content: center;
-          font-family: 'Space Mono', monospace;
-        }
-
-        .msg-sent {
-          background: var(--grad-red); color: #fff; font-weight: 500;
-          border-radius: 16px 16px 3px 16px; padding: 9px 14px;
-          font-size: 13.5px; line-height: 1.55; max-width: 320px;
-        }
-        .msg-recv {
-          background: var(--bg-raised); color: var(--text-primary);
-          border: 1px solid var(--border-mid);
-          border-radius: 16px 16px 16px 3px; padding: 9px 14px;
-          font-size: 13.5px; line-height: 1.55; max-width: 320px;
-        }
-
-        .input-field {
-          background: var(--bg-surface); border: 1px solid var(--border-mid);
-          border-radius: 12px; padding: 11px 14px;
-          display: flex; align-items: center; gap: 10px;
-          transition: border-color 0.2s;
-        }
-        .input-field:focus-within {
-          border-color: var(--red-core);
-          box-shadow: 0 0 0 3px var(--red-deep)22;
-        }
-        .input-field input {
-          flex: 1; background: none; border: none; outline: none;
-          font-size: 13px; color: var(--text-primary);
-          font-family: 'Syne', sans-serif;
-          caret-color: var(--red-bright);
-        }
-        .input-field input::placeholder { color: var(--text-muted); }
-
-        .nav-btn {
-          display: flex; flex-direction: column; align-items: center;
-          gap: 4px; padding: 6px 12px; border-radius: 8px;
-          cursor: pointer; color: var(--text-muted);
-          position: relative; border: none; background: transparent;
-          transition: color 0.15s; font-family: 'Space Mono', monospace;
-        }
-        .nav-btn.active  { color: var(--red-bright); }
-        .nav-btn:hover   { color: var(--chrome-mid); }
-        .nav-badge {
-          position: absolute; top: 0; right: 4px;
-          min-width: 16px; height: 16px; border-radius: 8px;
-          background: var(--grad-red); color: #fff;
-          font-size: 8px; font-weight: 700;
-          display: flex; align-items: center; justify-content: center; padding: 0 4px;
-        }
-
-        .notif-card {
-          padding: 12px; border-radius: 10px; margin-bottom: 6px;
-          transition: all 0.15s;
-        }
-        .notif-card.unread {
-          background: var(--bg-raised); border: 1px solid var(--border-accent);
-        }
-        .notif-card.read {
-          background: transparent; border: 1px solid var(--border-dim);
-        }
-
-        .settings-row {
-          display: flex; align-items: center; justify-content: space-between;
-          padding: 12px 14px; border-radius: 10px; margin-bottom: 6px;
-          background: var(--bg-surface); border: 1px solid var(--border-dim);
-        }
-
-        .call-ring-anim {
-          position: absolute; width: 72px; height: 72px; border-radius: 50%;
-          border: 1.5px solid var(--red-bright);
-          animation: pulse-ring 2s ease-out infinite;
-        }
-
-        .enc-tag {
-          display: flex; align-items: center; justify-content: center; gap: 6px;
-          padding: 4px 0; border-bottom: 1px solid var(--border-dim);
-          background: var(--bg-base);
-        }
-        .enc-tag span {
-          font-size: 9px; letter-spacing: 2.5px; color: var(--text-muted);
-          font-family: 'Space Mono', monospace; font-weight: 700;
-        }
-
-        .date-divider {
-          display: flex; align-items: center; gap: 10px; margin: 12px 0;
-        }
-        .date-divider-line { flex: 1; height: 1px; background: var(--border-dim); }
-        .date-divider-label {
-          font-size: 9px; font-weight: 700; letter-spacing: 2px;
-          color: var(--text-muted); font-family: 'Space Mono', monospace;
-        }
-
-        .profile-block {
-          margin: 8px 10px; padding: 10px 12px; border-radius: 10px;
-          background: var(--bg-raised); border: 1px solid var(--border-accent);
-          display: flex; align-items: center; gap: 10px;
+        .profile-row {
+          display: flex; align-items: center; gap: 12px;
+          padding: 14px 16px;
+          border-bottom: 1px solid var(--border);
         }
 
         .search-wrap {
-          margin: 0 10px 8px; padding: 8px 12px;
-          background: var(--bg-surface); border: 1px solid var(--border-dim);
-          border-radius: 9px; display: flex; align-items: center; gap: 8px;
-          transition: border-color 0.2s;
+          margin: 14px 12px 8px;
+          padding: 11px 13px;
+          border-radius: 18px;
+          background: rgba(255,255,255,0.02);
+          border: 1px solid var(--border);
+          display: flex; align-items: center; gap: 10px;
         }
-        .search-wrap:focus-within { border-color: var(--border-accent); }
+        .search-wrap:focus-within { border-color: var(--border-focus); box-shadow: 0 0 0 4px var(--accent-dim); }
         .search-wrap input {
-          flex: 1; background: none; border: none; outline: none;
-          font-size: 12px; color: var(--text-primary);
-          font-family: 'Syne', sans-serif;
+          flex: 1; border: none; outline: none; background: none;
+          font-size: 13px; color: var(--text-primary);
+          font-family: 'DM Sans', sans-serif;
         }
         .search-wrap input::placeholder { color: var(--text-muted); }
+
+        .tabs-row { display: flex; gap: 8px; padding: 0 12px 12px; }
+        .tab-btn {
+          flex: 1;
+          padding: 9px 0;
+          border-radius: 14px;
+          cursor: pointer;
+          border: 1px solid transparent;
+          background: rgba(255,255,255,0.02);
+          color: var(--text-muted);
+          font-size: 11px;
+          font-weight: 700;
+          letter-spacing: 0.4px;
+          text-transform: uppercase;
+        }
+        .tab-btn.active {
+          background: linear-gradient(135deg, rgba(194,167,114,0.16), rgba(255,255,255,0.04));
+          border-color: rgba(194,167,114,0.18);
+          color: var(--text-primary);
+        }
+
+        .users-list { flex: 1; overflow-y: auto; padding: 4px 10px 10px; }
+        .user-row {
+          display: flex; align-items: center; gap: 12px;
+          padding: 12px;
+          margin-bottom: 8px;
+          border-radius: 20px;
+          background: rgba(255,255,255,0.02);
+          border: 1px solid transparent;
+          cursor: pointer;
+          transition: .14s ease;
+        }
+        .user-row:hover { transform: translateY(-1px); background: var(--bg-hover); }
+        .user-row.active {
+          background: linear-gradient(135deg, rgba(194,167,114,0.12), rgba(255,255,255,0.03));
+          border-color: rgba(194,167,114,0.16);
+        }
+
+        .avatar {
+          border-radius: 50%;
+          display: flex; align-items: center; justify-content: center;
+          font-weight: 800; flex-shrink: 0;
+          font-family: 'DM Mono', monospace;
+          position: relative;
+        }
+        .avatar-online::after {
+          content: '';
+          position: absolute; bottom: 0; right: 0;
+          width: 9px; height: 9px; border-radius: 50%;
+          background: var(--green);
+          border: 2px solid var(--bg-surface);
+          box-shadow: 0 0 0 2px rgba(155,194,164,0.12);
+        }
+
+        .unread-badge {
+          min-width: 18px;
+          height: 18px;
+          padding: 0 5px;
+          border-radius: 999px;
+          background: linear-gradient(135deg, var(--accent), var(--accent-2));
+          color: #0c0c0c;
+          font-size: 10px;
+          font-weight: 900;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .bottom-nav {
+          border-top: 1px solid var(--border);
+          padding: 10px;
+          display: flex;
+          gap: 8px;
+          background: rgba(0,0,0,0.25);
+        }
+
+        .nav-btn {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 4px;
+          padding: 10px 4px;
+          border-radius: 16px;
+          cursor: pointer;
+          color: var(--text-muted);
+          border: 1px solid transparent;
+          background: rgba(255,255,255,0.02);
+          transition: .15s ease;
+          position: relative;
+        }
+        .nav-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+        .nav-btn.active {
+          background: linear-gradient(135deg, rgba(194,167,114,0.16), rgba(255,255,255,0.03));
+          border-color: rgba(194,167,114,0.16);
+          color: var(--text-primary);
+        }
+        .nav-btn-label {
+          font-size: 9px;
+          font-weight: 700;
+          letter-spacing: 0.55px;
+          text-transform: uppercase;
+        }
+        .nav-badge {
+          position: absolute;
+          top: 5px;
+          right: 6px;
+          min-width: 14px;
+          height: 14px;
+          border-radius: 999px;
+          background: var(--accent);
+          color: #0b0b0b;
+          font-size: 8px;
+          font-weight: 900;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .side-panel {
+          width: 280px;
+          min-width: 280px;
+          height: 100vh;
+          display: flex;
+          flex-direction: column;
+          background: linear-gradient(180deg, rgba(18,18,18,0.94), rgba(12,12,12,0.96));
+          border-right: 1px solid var(--border);
+          animation: shimmer-in 0.2s ease-out;
+        }
+
+        .panel-title {
+          font-size: 13px;
+          font-weight: 800;
+          color: var(--text-primary);
+        }
+
+        .notif-card, .settings-row {
+          margin: 0 10px 8px;
+          border-radius: 20px;
+          border: 1px solid var(--border);
+          background: rgba(255,255,255,0.025);
+        }
+
+        .notif-card { padding: 12px 14px; }
+        .notif-card.unread { background: rgba(194,167,114,0.08); }
+        .notif-card.read { opacity: 0.55; }
+        .notif-text { font-size: 12.5px; line-height: 1.55; color: var(--text-primary); }
+        .notif-time { font-size: 10px; color: var(--text-muted); margin-top: 4px; font-family: 'DM Mono', monospace; }
+
+        .settings-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 12px 14px;
+        }
+        .settings-label { font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+        .toggle-track {
+          width: 38px; height: 20px;
+          border-radius: 999px;
+          position: relative;
+          border: none;
+          cursor: pointer;
+        }
+        .toggle-thumb {
+          position: absolute;
+          top: 2px;
+          width: 16px;
+          height: 16px;
+          border-radius: 50%;
+          transition: left 0.2s;
+        }
+
+        .chat-area {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+          background:
+            radial-gradient(circle at 50% 0%, rgba(194,167,114,0.06), transparent 26%),
+            linear-gradient(180deg, rgba(255,255,255,0.01), rgba(0,0,0,0.10));
+        }
+
+        .top-strip {
+          height: 42px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 0 18px;
+          border-bottom: 1px solid var(--border);
+          background: rgba(255,255,255,0.01);
+          flex-shrink: 0;
+        }
+        .top-chip {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          padding: 7px 12px;
+          border-radius: 999px;
+          border: 1px solid var(--border);
+          background: rgba(255,255,255,0.02);
+          font-size: 11px;
+          color: var(--text-secondary);
+        }
+
+        .chat-header {
+          padding: 0 18px;
+          height: 72px;
+          border-bottom: 1px solid var(--border);
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          flex-shrink: 0;
+        }
+        .chat-header-left { display: flex; align-items: center; gap: 12px; }
+        .chat-header-actions { display: flex; gap: 8px; }
+        .chat-username { font-size: 15px; font-weight: 800; }
+        .chat-substatus { font-size: 11px; margin-top: 2px; }
+
+        .enc-strip {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+          padding: 6px 0;
+          border-bottom: 1px solid var(--border);
+          background: rgba(255,255,255,0.01);
+        }
+        .enc-label {
+          font-size: 10px;
+          font-weight: 700;
+          color: var(--text-muted);
+          letter-spacing: 0.65px;
+          font-family: 'DM Mono', monospace;
+          text-transform: uppercase;
+        }
+
+        .messages-scroll {
+          flex: 1;
+          overflow-y: auto;
+          padding: 24px 24px 18px;
+          display: flex;
+          flex-direction: column;
+        }
+
+        .date-divider {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          margin: 16px 0 14px;
+        }
+        .date-divider-line { flex: 1; height: 1px; background: var(--border); }
+        .date-divider-label {
+          font-size: 10px;
+          font-weight: 700;
+          color: var(--text-muted);
+          letter-spacing: 0.6px;
+          font-family: 'DM Mono', monospace;
+          white-space: nowrap;
+        }
+
+        .msg-row { display: flex; align-items: flex-end; gap: 10px; }
+        .msg-row.sent { justify-content: flex-end; }
+        .msg-row.recv { justify-content: flex-start; }
+
+        .msg-sent {
+          background: linear-gradient(145deg, rgba(194,167,114,0.95), rgba(171,143,97,0.95));
+          color: #15120d;
+          border-radius: 22px 22px 6px 22px;
+          padding: 11px 15px;
+          line-height: 1.5;
+          max-width: 360px;
+          box-shadow: 0 10px 26px rgba(194,167,114,0.12);
+          word-break: break-word;
+        }
+        .msg-recv {
+          background: rgba(255,255,255,0.03);
+          color: var(--text-primary);
+          border: 1px solid var(--border);
+          border-radius: 22px 22px 22px 6px;
+          padding: 11px 15px;
+          line-height: 1.5;
+          max-width: 360px;
+          word-break: break-word;
+        }
+
+        .msg-time {
+          font-size: 9px;
+          color: var(--text-muted);
+          margin-top: 4px;
+          opacity: 0;
+          transition: opacity 0.15s;
+          font-family: 'DM Mono', monospace;
+        }
+        .msg-wrap:hover .msg-time { opacity: 1; }
+
+        .typing-bubble {
+          background: rgba(255,255,255,0.03);
+          border: 1px solid var(--border);
+          border-radius: 22px 22px 22px 6px;
+          padding: 10px 14px;
+          display: flex;
+          gap: 4px;
+          align-items: center;
+        }
+        .typing-dot {
+          width: 5px; height: 5px;
+          border-radius: 50%;
+          background: var(--text-muted);
+        }
+
+        .composer-wrap {
+          padding: 14px 16px 16px;
+          border-top: 1px solid var(--border);
+          background: rgba(0,0,0,0.24);
+        }
+        .composer {
+          border-radius: 26px;
+          padding: 12px 14px;
+          border: 1px solid var(--border);
+          background: rgba(255,255,255,0.03);
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          box-shadow: var(--shadow-md);
+        }
+        .composer:focus-within { border-color: var(--border-focus); box-shadow: 0 0 0 4px var(--accent-dim); }
+        .composer input {
+          flex: 1;
+          border: none;
+          outline: none;
+          background: none;
+          color: var(--text-primary);
+          font-size: 13.5px;
+          font-family: 'DM Sans', sans-serif;
+        }
+        .composer input::placeholder { color: var(--text-muted); }
+
+        .mini-btn {
+          width: 36px;
+          height: 36px;
+          border-radius: 14px;
+          border: 1px solid var(--border);
+          background: rgba(255,255,255,0.02);
+          color: var(--text-muted);
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .mini-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+        .send-btn {
+          width: 38px;
+          height: 38px;
+          border-radius: 14px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border: none;
+          transition: .15s ease;
+          flex-shrink: 0;
+        }
+        .send-btn.active {
+          background: linear-gradient(135deg, var(--accent), var(--accent-2));
+          color: #fff;
+          cursor: pointer;
+          box-shadow: var(--shadow-accent);
+        }
+        .send-btn.inactive {
+          background: transparent;
+          border: 1px solid var(--border);
+          color: var(--text-disabled);
+          cursor: not-allowed;
+        }
+
+        .empty-state {
+          flex: 1;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .empty-inner {
+          text-align: center;
+          max-width: 320px;
+        }
+        .empty-icon {
+          width: 74px;
+          height: 74px;
+          border-radius: 26px;
+          margin: 0 auto 18px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: linear-gradient(145deg, rgba(194,167,114,0.12), rgba(255,255,255,0.03));
+          border: 1px solid var(--border);
+        }
+        .empty-title { font-size: 18px; font-weight: 800; margin-bottom: 6px; }
+        .empty-subtitle { font-size: 13px; color: var(--text-muted); line-height: 1.6; }
+
+        .call-overlay {
+          position: fixed;
+          inset: 0;
+          z-index: 100;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: rgba(0,0,0,0.72);
+          backdrop-filter: blur(18px);
+          animation: shimmer-in 0.2s ease-out;
+        }
+        .call-modal {
+          width: 400px;
+          border-radius: 30px;
+          overflow: hidden;
+          background: rgba(18,18,18,0.96);
+          border: 1px solid var(--border-mid);
+          box-shadow: var(--shadow-lg);
+        }
+        .call-modal-header {
+          padding: 14px 20px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          border-bottom: 1px solid var(--border);
+        }
+        .call-status-tag {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          font-size: 11px;
+          font-weight: 700;
+          color: var(--text-secondary);
+          font-family: 'DM Mono', monospace;
+        }
+        .call-enc-tag {
+          font-size: 10px;
+          color: var(--green);
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          font-family: 'DM Mono', monospace;
+          font-weight: 700;
+        }
+        .call-modal-body {
+          padding: 28px 24px 16px;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 8px;
+        }
+        .call-avatar-wrap {
+          position: relative;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin-bottom: 6px;
+        }
+        .call-ring {
+          position: absolute;
+          border-radius: 50%;
+          border: 1.5px solid var(--accent);
+          animation: pulse-ring 2s ease-out infinite;
+        }
+        .call-name { font-size: 20px; font-weight: 800; }
+        .call-sub {
+          font-size: 12px;
+          color: var(--text-secondary);
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
+        .call-modal-actions {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 14px;
+          padding: 16px 24px 28px;
+        }
+        .call-action-btn {
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          border: none;
+          transition: all 0.15s;
+        }
+        .call-btn-end {
+          width: 54px;
+          height: 54px;
+          background: linear-gradient(135deg, #d28c8c, #b85f5f);
+          color: #fff;
+        }
+        .call-btn-accept {
+          width: 54px;
+          height: 54px;
+          background: linear-gradient(135deg, #9bc2a4, #7ea68a);
+          color: #fff;
+        }
+        .call-btn-reject {
+          width: 54px;
+          height: 54px;
+          background: var(--red-dim);
+          border: 1.5px solid rgba(210,140,140,0.35) !important;
+          color: var(--red);
+        }
+        .call-ctrl-btn {
+          width: 44px;
+          height: 44px;
+          background: rgba(255,255,255,0.04);
+          border: 1px solid var(--border-mid) !important;
+          color: var(--text-secondary);
+        }
+
+        .no-users {
+          text-align: center;
+          padding: 32px 16px;
+          font-size: 12px;
+          color: var(--text-muted);
+        }
+
+        .list-section-label {
+          font-size: 10px;
+          font-weight: 800;
+          color: var(--text-disabled);
+          letter-spacing: 0.8px;
+          padding: 8px 10px 4px;
+          text-transform: uppercase;
+          font-family: 'DM Mono', monospace;
+        }
       `}</style>
 
-      {/* ── CALL MODAL ── */}
       {callState !== 'idle' && callPartner && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.95)', backdropFilter: 'blur(20px)' }}>
-          <div style={{ width: 380, borderRadius: 20, overflow: 'hidden', background: 'linear-gradient(160deg,#101012,#080809)', border: '1px solid var(--border-accent)', boxShadow: '0 0 80px #8b000033, 0 40px 100px rgba(0,0,0,0.9)' }}>
-            {/* Modal header */}
-            <div style={{ padding: '12px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border-dim)' }}>
-              <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 3, color: 'var(--text-muted)', fontFamily: "'Space Mono', monospace" }}>
-                {callState === 'calling' ? '◉ OUTGOING' : callState === 'incoming' ? '◉ INCOMING' : '◉ CONNECTED'} — {callType.toUpperCase()}
-              </span>
-              <span style={{ fontSize: 9, letterSpacing: 2, color: 'var(--red-core)', fontFamily: "'Space Mono', monospace" }}>E2E ENCRYPTED</span>
+        <div className="call-overlay">
+          <div className="call-modal">
+            <div className="call-modal-header">
+              <div className="call-status-tag">
+                <span
+                  style={{
+                    width: 6,
+                    height: 6,
+                    borderRadius: '50%',
+                    background: callState === 'connected' ? 'var(--green)' : 'var(--accent)',
+                    display: 'inline-block',
+                    animation: callState === 'connected' ? 'none' : 'pulse-ring 1.5s infinite'
+                  }}
+                />
+                {callState === 'calling' ? 'Calling…' : callState === 'incoming' ? `Incoming ${callType}` : 'Connected'} · {callType === 'video' ? 'Video' : 'Voice'}
+              </div>
+              <div className="call-enc-tag">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="11" width="18" height="11" rx="2" />
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                </svg>
+                Encrypted
+              </div>
             </div>
 
             {callType === 'video' && callState === 'connected' && (
-              <div style={{ width: '100%', height: 200, background: '#050507', position: 'relative' }}>
-                <video ref={remoteVideoRef} autoPlay playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'none' }} />
-                <div style={{ position: 'absolute', bottom: 10, right: 10, width: 80, height: 108, borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border-accent)' }}>
+              <div style={{ width: '100%', height: 190, background: '#060606', position: 'relative' }}>
+                <video ref={remoteVideoRef} autoPlay playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                <div style={{ position: 'absolute', bottom: 10, right: 10, width: 82, height: 104, borderRadius: 16, overflow: 'hidden', border: '1.5px solid var(--border-mid)', boxShadow: 'var(--shadow-md)' }}>
                   <video ref={localVideoRef} autoPlay playsInline muted style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 </div>
               </div>
             )}
 
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '28px 24px 12px', gap: 10 }}>
+            <div className="call-modal-body">
               {(callState === 'calling' || callState === 'incoming') && (
-                <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 8 }}>
-                  {[0, 0.6, 1.2].map(delay => (
-                    <div key={delay} className="call-ring-anim" style={{ animationDelay: `${delay}s` }} />
+                <div className="call-avatar-wrap" style={{ marginBottom: 12 }}>
+                  {[0, 0.65, 1.3].map(d => (
+                    <div key={d} className="call-ring" style={{ width: 76, height: 76, animationDelay: `${d}s` }} />
                   ))}
-                  <div className="avatar-ring" style={{ width: 64, height: 64, fontSize: 22, background: `${getAvatarColor(callPartner.username)}18`, border: `2px solid ${getAvatarColor(callPartner.username)}`, color: getAvatarColor(callPartner.username), position: 'relative', zIndex: 1 }}>
+                  <div className="avatar" style={{ width: 64, height: 64, fontSize: 22, background: `${getAvatarColor(callPartner.username)}16`, border: `2px solid ${getAvatarColor(callPartner.username)}45`, color: getAvatarColor(callPartner.username), zIndex: 1 }}>
                     {callPartner.username[0].toUpperCase()}
                   </div>
                 </div>
               )}
               {callState === 'connected' && callType === 'audio' && (
-                <div className="avatar-ring" style={{ width: 64, height: 64, fontSize: 22, background: `${getAvatarColor(callPartner.username)}18`, border: `2px solid ${getAvatarColor(callPartner.username)}`, color: getAvatarColor(callPartner.username) }}>
+                <div className="avatar" style={{ width: 64, height: 64, fontSize: 22, background: `${getAvatarColor(callPartner.username)}16`, border: `2px solid ${getAvatarColor(callPartner.username)}45`, color: getAvatarColor(callPartner.username), marginBottom: 8 }}>
                   {callPartner.username[0].toUpperCase()}
                 </div>
               )}
-              <p style={{ color: 'var(--text-primary)', fontSize: 18, fontWeight: 700, letterSpacing: 1 }}>{callPartner.username}</p>
-              <p style={{ fontSize: 12, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                {callState === 'calling' && <><span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--red-bright)', display: 'inline-block', animation: 'pulse-ring 1s infinite' }} />Ringing...</>}
-                {callState === 'incoming' && <><span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--red-bright)', display: 'inline-block', animation: 'pulse-ring 1s infinite' }} />Incoming {callType} call</>}
-                {callState === 'connected' && <><span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--red-bright)', display: 'inline-block', boxShadow: '0 0 6px var(--red-bright)' }} />{formatDur(callDuration)}</>}
+              <p className="call-name">{callPartner.username}</p>
+              <p className="call-sub">
+                {callState === 'calling' && <>Ringing…</>}
+                {callState === 'incoming' && <>Incoming {callType} call</>}
+                {callState === 'connected' && <><span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--green)', display: 'inline-block' }} />{formatDur(callDuration)}</>}
               </p>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16, padding: '12px 24px 28px' }}>
+            <div className="call-modal-actions">
               {callState === 'connected' && (
                 <>
-                  <button onClick={toggleMute} className="ctrl-btn" style={{ width: 48, height: 48, ...(isMuted ? { background: '#ff000022', borderColor: '#ff3b44', color: '#ff3b44' } : {}) }}>
-                    {isMuted
-                      ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
-                      : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>}
+                  <button onClick={toggleMute} className={`call-action-btn call-ctrl-btn${isMuted ? ' active-mute' : ''}`} title={isMuted ? 'Unmute' : 'Mute'}>
+                    {isMuted ? '🔇' : '🎙️'}
                   </button>
-                  <button onClick={endCall} style={{ width: 56, height: 56, borderRadius: '50%', background: 'var(--grad-red)', border: 'none', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 0 24px var(--red-deep)' }}>
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="white"><path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1-9.4 0-17-7.6-17-17 0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z"/></svg>
-                  </button>
+                  <button onClick={endCall} className="call-action-btn call-btn-end" title="End call">⏹</button>
                   {callType === 'video' && (
-                    <button onClick={toggleCamera} className="ctrl-btn" style={{ width: 48, height: 48, ...(isCameraOff ? { background: '#ff000022', borderColor: '#ff3b44', color: '#ff3b44' } : {}) }}>
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        {isCameraOff
-                          ? <><line x1="1" y1="1" x2="23" y2="23"/><path d="M21 21H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3m3-3h6l2 3h2a2 2 0 0 1 2 2v9.34"/></>
-                          : <><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></>}
-                      </svg>
+                    <button onClick={toggleCamera} className={`call-action-btn call-ctrl-btn${isCameraOff ? ' active-mute' : ''}`} title={isCameraOff ? 'Enable camera' : 'Disable camera'}>
+                      {isCameraOff ? '📷' : '🎥'}
                     </button>
                   )}
                 </>
               )}
               {callState === 'calling' && (
-                <button onClick={endCall} style={{ width: 56, height: 56, borderRadius: '50%', background: 'var(--grad-red)', border: 'none', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 0 24px var(--red-deep)' }}>
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="white"><path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1-9.4 0-17-7.6-17-17 0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z"/></svg>
-                </button>
+                <button onClick={endCall} className="call-action-btn call-btn-end" title="Cancel">✕</button>
               )}
               {callState === 'incoming' && (
                 <>
-                  <button onClick={rejectCall} style={{ width: 56, height: 56, borderRadius: '50%', background: '#ff000018', border: '2px solid var(--red-bright)', color: 'var(--red-bright)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1-9.4 0-17-7.6-17-17 0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z"/></svg>
-                  </button>
-                  <button onClick={acceptCall} style={{ width: 56, height: 56, borderRadius: '50%', background: 'var(--grad-red)', border: 'none', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 0 24px var(--red-deep)' }}>
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="white"><path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1-9.4 0-17-7.6-17-17 0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z"/></svg>
-                  </button>
+                  <button onClick={rejectCall} className="call-action-btn call-btn-reject" title="Decline">✕</button>
+                  <button onClick={acceptCall} className="call-action-btn call-btn-accept" title="Accept">✓</button>
                 </>
               )}
             </div>
@@ -611,167 +1055,173 @@ const ChatPage = () => {
         </div>
       )}
 
-      {/* ── SIDEBAR ── */}
-      <div style={{ width: 272, minWidth: 272, background: 'var(--bg-base)', borderRight: '1px solid var(--border-dim)', display: 'flex', flexDirection: 'column' }}>
-
-        {/* Header */}
-        <div style={{ padding: '16px 14px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border-dim)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ width: 30, height: 30, borderRadius: 8, background: 'var(--bg-raised)', border: '1px solid var(--border-accent)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--red-bright)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>
+      <div className="sidebar">
+        <div className="sidebar-header">
+          <div className="logo-mark">
+            <div className="logo-icon">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+              </svg>
             </div>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 0 }}>
-              <span className="logo-text-cipher">CIPHER</span>
-              <span className="logo-text-chat">CHAT</span>
-            </div>
+            <span className="logo-text">Obsidian<span>Link</span></span>
           </div>
-          <button onClick={() => { logout(); navigate('/login'); }} className="ctrl-btn" style={{ width: 28, height: 28, color: 'var(--text-red)', borderColor: '#ff3b4422' }} title="Logout">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></svg>
-          </button>
+          <button onClick={() => { logout(); navigate('/login'); }} className="icon-btn danger" title="Sign out">↗</button>
         </div>
 
-        {/* Profile */}
-        <div className="profile-block">
-          <div className="avatar-ring" style={{ width: 36, height: 36, fontSize: 13, background: `${getAvatarColor(currentUsername)}18`, border: `1.5px solid ${getAvatarColor(currentUsername)}`, color: getAvatarColor(currentUsername) }}>
+        <div className="profile-row">
+          <div className="avatar" style={{ width: 34, height: 34, background: `${getAvatarColor(currentUsername)}16`, border: `1.5px solid ${getAvatarColor(currentUsername)}45`, color: getAvatarColor(currentUsername) }}>
             {currentUsername[0].toUpperCase()}
           </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <p style={{ color: 'var(--text-primary)', fontSize: 13, fontWeight: 600, margin: 0 }}>{currentUsername}</p>
-            <p style={{ fontSize: 11, color: 'var(--red-core)', display: 'flex', alignItems: 'center', gap: 4, margin: '2px 0 0' }}>
-              <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--red-bright)', boxShadow: '0 0 5px var(--red-bright)', display: 'inline-block' }} />
-              Online — Encrypted
-            </p>
+          <div className="profile-info">
+            <div className="profile-name">{currentUsername}</div>
+            <div className="profile-status">
+              <span className="status-dot" style={{ background: 'var(--green)', boxShadow: '0 0 6px var(--green)' }} />
+              Online
+            </div>
           </div>
         </div>
 
-        {/* Search */}
         <div className="search-wrap">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
-          <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search..." />
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="11" cy="11" r="8" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+          <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search people…" />
         </div>
 
-        {/* Tabs */}
-        <div style={{ display: 'flex', gap: 4, padding: '0 10px 8px' }}>
+        <div className="tabs-row">
           {['All', 'Unread', 'DMs'].map(tab => (
-            <button key={tab} className={`tab-btn${activeTab === tab ? ' active' : ''}`} onClick={() => setActiveTab(tab)}>{tab.toUpperCase()}</button>
+            <button key={tab} className={`tab-btn${activeTab === tab ? ' active' : ''}`} onClick={() => setActiveTab(tab)}>{tab}</button>
           ))}
         </div>
 
-        {/* User list */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '0 6px 6px' }}>
-          {filteredUsers.length === 0
-            ? <div style={{ textAlign: 'center', paddingTop: 32, color: 'var(--text-muted)', fontSize: 11, letterSpacing: 2, fontFamily: "'Space Mono', monospace" }}>NO USERS</div>
-            : filteredUsers.map(u => (
-              <div key={u._id} className={`user-row${selectedUser?._id === u._id ? ' active' : ''}`}
-                onClick={() => { setSelectedUser(u); setUnreadCounts(prev => ({ ...prev, [u._id]: 0 })); }}>
-                <div style={{ position: 'relative', flexShrink: 0 }}>
-                  <div className="avatar-ring" style={{ width: 38, height: 38, fontSize: 13, background: `${getAvatarColor(u.username)}15`, border: `1.5px solid ${getAvatarColor(u.username)}`, color: getAvatarColor(u.username) }}>
-                    {u.username[0].toUpperCase()}
-                  </div>
-                  {isOnline(u._id) && <div className="online-dot" />}
+        <div className="users-list">
+          {filteredUsers.length === 0 ? (
+            <div className="no-users">No users found</div>
+          ) : filteredUsers.map(u => (
+            <div
+              key={u._id}
+              className={`user-row${selectedUser?._id === u._id ? ' active' : ''}`}
+              onClick={() => {
+                setSelectedUser(u);
+                setUnreadCounts(prev => ({ ...prev, [u._id]: 0 }));
+              }}
+            >
+              <div
+                className={`avatar${isOnline(u._id) ? ' avatar-online' : ''}`}
+                style={{ width: 38, height: 38, background: `${getAvatarColor(u.username)}16`, border: `1.5px solid ${getAvatarColor(u.username)}45`, color: getAvatarColor(u.username) }}
+              >
+                {u.username[0].toUpperCase()}
+              </div>
+              <div className="user-info">
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                  <span className="user-name">{u.username}</span>
+                  {(unreadCounts[u._id] ?? 0) > 0 && <div className="unread-badge">{unreadCounts[u._id] > 9 ? '9+' : unreadCounts[u._id]}</div>}
                 </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <p style={{ color: 'var(--text-primary)', fontSize: 13, fontWeight: 500, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.username}</p>
-                    {(unreadCounts[u._id] ?? 0) > 0 && (
-                      <div className="unread-pill">{unreadCounts[u._id] > 9 ? '9+' : unreadCounts[u._id]}</div>
-                    )}
-                  </div>
-                  <p style={{ fontSize: 11, marginTop: 2, color: isOnline(u._id) ? 'var(--red-core)' : 'var(--text-muted)' }}>
-                    {isOnline(u._id) ? '● Online' : '○ Offline'}
-                  </p>
+                <div className="user-status" style={{ color: isOnline(u._id) ? 'var(--green)' : 'var(--text-muted)' }}>
+                  {isOnline(u._id) ? 'Active now' : 'Offline'}
                 </div>
               </div>
-            ))}
+            </div>
+          ))}
         </div>
 
-        {/* Bottom nav */}
-        <div style={{ borderTop: '1px solid var(--border-dim)', padding: '8px 4px', display: 'flex', justifyContent: 'space-around' }}>
+        <div className="bottom-nav">
           {[
-            {
-              id: 'chats', label: 'CHATS', badge: 0,
-              icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
-            },
-            {
-              id: 'notifications', label: 'ALERTS', badge: unreadNotifCount,
-              icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" /></svg>
-            },
-            {
-              id: 'settings', label: 'CONFIG', badge: 0,
-              icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg>
-            },
+            { id: 'chats', label: 'Chats', badge: 0, icon: '◔' },
+            { id: 'notifications', label: 'Alerts', badge: unreadNotifCount, icon: '✦' },
+            { id: 'settings', label: 'Settings', badge: 0, icon: '◌' },
           ].map(({ id, label, badge, icon }) => {
             const isActive = id === 'chats' ? activePanel === 'none' : activePanel === id;
             return (
-              <button key={id} className={`nav-btn${isActive ? ' active' : ''}`}
-                onClick={() => id !== 'chats' && togglePanel(id as ActivePanel)}>
+              <button key={id} className={`nav-btn${isActive ? ' active' : ''}`} onClick={() => id !== 'chats' && togglePanel(id as ActivePanel)}>
                 {badge > 0 && <div className="nav-badge">{badge}</div>}
-                {icon}
-                <span style={{ fontSize: 8, fontWeight: 700, letterSpacing: 2 }}>{label}</span>
+                <div style={{ fontSize: 15 }}>{icon}</div>
+                <span className="nav-btn-label">{label}</span>
               </button>
             );
           })}
         </div>
       </div>
 
-      {/* ── NOTIFICATIONS PANEL ── */}
       {activePanel === 'notifications' && (
-        <div style={{ width: 256, minWidth: 256, background: 'var(--bg-base)', borderRight: '1px solid var(--border-dim)', display: 'flex', flexDirection: 'column' }}>
-          <div style={{ padding: '16px 16px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border-dim)' }}>
-            <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 3, color: 'var(--red-bright)', fontFamily: "'Space Mono', monospace" }}>NOTIFICATIONS</span>
-            <button onClick={() => setNotifications(p => p.map(n => ({ ...n, read: true })))}
-              style={{ fontSize: 9, letterSpacing: 2, color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: "'Space Mono', monospace" }}>
-              CLEAR ALL
+        <div className="side-panel">
+          <div className="panel-header">
+            <span className="panel-title">Notifications</span>
+            <button onClick={() => setNotifications(p => p.map(n => ({ ...n, read: true })))} style={{ fontSize: 11, color: 'var(--accent-2)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 700 }}>
+              Mark all read
             </button>
           </div>
-          <div style={{ flex: 1, overflowY: 'auto', padding: '10px 10px' }}>
+          <div style={{ flex: 1, overflowY: 'auto', padding: '10px 0' }}>
             {notifications.map(n => (
               <div key={n.id} className={`notif-card ${n.read ? 'read' : 'unread'}`}>
-                <p style={{ fontSize: 12, color: n.read ? 'var(--text-muted)' : 'var(--text-primary)', margin: 0 }}>{n.text}</p>
-                <p style={{ fontSize: 9, marginTop: 5, letterSpacing: 2, color: 'var(--text-muted)', fontFamily: "'Space Mono', monospace" }}>{n.time}</p>
+                {!n.read && <div style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--accent)', marginBottom: 8 }} />}
+                <p className="notif-text">{n.text}</p>
+                <p className="notif-time">{n.time}</p>
               </div>
             ))}
           </div>
         </div>
       )}
 
-      {/* ── SETTINGS PANEL ── */}
       {activePanel === 'settings' && (
-        <div style={{ width: 256, minWidth: 256, background: 'var(--bg-base)', borderRight: '1px solid var(--border-dim)', display: 'flex', flexDirection: 'column' }}>
-          <div style={{ padding: '16px 16px 12px', borderBottom: '1px solid var(--border-dim)' }}>
-            <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 3, color: 'var(--red-bright)', fontFamily: "'Space Mono', monospace" }}>CONFIG</span>
+        <div className="side-panel">
+          <div className="panel-header">
+            <span className="panel-title">Preferences</span>
           </div>
-          <div style={{ flex: 1, overflowY: 'auto', padding: '10px 10px' }}>
+          <div style={{ flex: 1, overflowY: 'auto', padding: '10px 0' }}>
+            <div className="list-section-label">Notifications</div>
             {[
-              { key: 'notifications', label: 'PUSH ALERTS' },
-              { key: 'sounds', label: 'SOUND FX' },
-              { key: 'encryption', label: 'E2E ENCRYPT' },
-              { key: 'readReceipts', label: 'READ RECEIPTS' },
+              { key: 'notifications', label: 'Push alerts' },
+              { key: 'sounds', label: 'Sound effects' },
+              { key: 'readReceipts', label: 'Read receipts' },
             ].map(({ key, label }) => (
               <div key={key} className="settings-row">
-                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 2, color: 'var(--text-secondary)', fontFamily: "'Space Mono', monospace" }}>{label}</span>
-                <button className="toggle-track"
-                  style={{ background: (settings as any)[key] ? 'var(--red-deep)' : 'var(--bg-hover)' }}
-                  onClick={() => setSettings(p => ({ ...p, [key]: !(p as any)[key] }))}>
-                  <span className="toggle-thumb"
-                    style={{ left: (settings as any)[key] ? '18px' : '2px', background: (settings as any)[key] ? 'var(--red-bright)' : 'var(--chrome-dim)' }} />
+                <span className="settings-label">{label}</span>
+                <button
+                  className="toggle-track"
+                  style={{ background: (settings as any)[key] ? 'linear-gradient(135deg, var(--accent), var(--accent-2))' : 'rgba(255,255,255,0.08)' }}
+                  onClick={() => setSettings(p => ({ ...p, [key]: !(p as any)[key] }))}
+                >
+                  <span className="toggle-thumb" style={{ left: (settings as any)[key] ? '20px' : '2px', background: '#fff' }} />
                 </button>
               </div>
             ))}
-            <div className="settings-row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 10 }}>
-              <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 2, color: 'var(--text-secondary)', fontFamily: "'Space Mono', monospace" }}>FONT SIZE</span>
-              <div style={{ display: 'flex', gap: 6, width: '100%' }}>
+
+            <div className="list-section-label">Security</div>
+            <div className="settings-row">
+              <span className="settings-label">End-to-end encryption</span>
+              <button
+                className="toggle-track"
+                style={{ background: settings.encryption ? 'linear-gradient(135deg, var(--accent), var(--accent-2))' : 'rgba(255,255,255,0.08)' }}
+                onClick={() => setSettings(p => ({ ...p, encryption: !p.encryption }))}
+              >
+                <span className="toggle-thumb" style={{ left: settings.encryption ? '20px' : '2px', background: '#fff' }} />
+              </button>
+            </div>
+
+            <div className="list-section-label">Appearance</div>
+            <div className="settings-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 10 }}>
+              <span className="settings-label">Font size</span>
+              <div style={{ display: 'flex', gap: 8 }}>
                 {['small', 'medium', 'large'].map(sz => (
-                  <button key={sz} onClick={() => setSettings(p => ({ ...p, fontSize: sz }))}
+                  <button
+                    key={sz}
+                    onClick={() => setSettings(p => ({ ...p, fontSize: sz }))}
                     style={{
-                      flex: 1, padding: '6px 0', borderRadius: 7, fontSize: 10, fontWeight: 700,
-                      letterSpacing: 1, textTransform: 'capitalize', cursor: 'pointer',
-                      fontFamily: "'Space Mono', monospace",
-                      ...(settings.fontSize === sz
-                        ? { background: 'var(--grad-red)', color: '#fff', border: 'none' }
-                        : { background: 'var(--bg-hover)', color: 'var(--text-muted)', border: '1px solid var(--border-mid)' })
-                    }}>
-                    {sz[0].toUpperCase()}
+                      flex: 1,
+                      padding: '7px 0',
+                      borderRadius: 12,
+                      fontSize: 11,
+                      fontWeight: 700,
+                      textTransform: 'capitalize',
+                      cursor: 'pointer',
+                      border: settings.fontSize === sz ? 'none' : '1px solid var(--border)',
+                      background: settings.fontSize === sz ? 'linear-gradient(135deg, var(--accent), var(--accent-2))' : 'rgba(255,255,255,0.03)',
+                      color: settings.fontSize === sz ? '#fff' : 'var(--text-muted)',
+                    }}
+                  >
+                    {sz[0].toUpperCase() + sz.slice(1)}
                   </button>
                 ))}
               </div>
@@ -780,51 +1230,62 @@ const ChatPage = () => {
         </div>
       )}
 
-      {/* ── CHAT AREA ── */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--bg-void)' }}>
+      <div className="chat-area">
+        <div className="top-strip">
+          <div className="top-chip">
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--accent)', boxShadow: '0 0 10px var(--accent)' }} />
+            Private communication system
+          </div>
+          <div className="top-chip">
+            {users.length} contacts · {onlineUsers.length} live
+          </div>
+        </div>
+
         {selectedUser ? (
           <>
-            {/* Chat header */}
-            <div style={{ padding: '12px 20px', background: 'var(--bg-base)', borderBottom: '1px solid var(--border-dim)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{ position: 'relative' }}>
-                  <div className="avatar-ring" style={{ width: 36, height: 36, fontSize: 13, background: `${getAvatarColor(selectedUser.username)}15`, border: `1.5px solid ${getAvatarColor(selectedUser.username)}`, color: getAvatarColor(selectedUser.username) }}>
-                    {selectedUser.username[0].toUpperCase()}
-                  </div>
-                  {isOnline(selectedUser._id) && <div className="online-dot" style={{ borderColor: 'var(--bg-base)' }} />}
+            <div className="chat-header">
+              <div className="chat-header-left">
+                <div
+                  className={`avatar${isOnline(selectedUser._id) ? ' avatar-online' : ''}`}
+                  style={{ width: 40, height: 40, background: `${getAvatarColor(selectedUser.username)}16`, border: `1.5px solid ${getAvatarColor(selectedUser.username)}45`, color: getAvatarColor(selectedUser.username) }}
+                >
+                  {selectedUser.username[0].toUpperCase()}
                 </div>
                 <div>
-                  <p style={{ color: 'var(--text-primary)', fontSize: 14, fontWeight: 600, margin: 0 }}>{selectedUser.username}</p>
-                  <p style={{ fontSize: 11, margin: '2px 0 0', color: isTyping ? 'var(--red-bright)' : isOnline(selectedUser._id) ? 'var(--red-core)' : 'var(--text-muted)' }}>
-                    {isTyping ? '▮ typing...' : isOnline(selectedUser._id) ? '◉ Online' : '○ Offline'}
-                  </p>
+                  <div className="chat-username">{selectedUser.username}</div>
+                  <div className="chat-substatus" style={{ color: isTyping ? 'var(--accent-2)' : isOnline(selectedUser._id) ? 'var(--green)' : 'var(--text-muted)' }}>
+                    {isTyping ? 'typing…' : isOnline(selectedUser._id) ? 'Active now' : 'Offline'}
+                  </div>
                 </div>
               </div>
-              <div style={{ display: 'flex', gap: 6 }}>
-                <button onClick={() => startCall('audio')} className="ctrl-btn" style={{ width: 32, height: 32 }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.71 3.35 2 2 0 0 1 3.71 1.19h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 8.91a16 16 0 0 0 6 6l.86-.86a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21.73 16.92z" /></svg>
-                </button>
-                <button onClick={() => startCall('video')} className="ctrl-btn" style={{ width: 32, height: 32 }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="23 7 16 12 23 17 23 7" /><rect x="1" y="5" width="15" height="14" rx="2" ry="2" /></svg>
-                </button>
+              <div className="chat-header-actions">
+                <button onClick={() => startCall('audio')} className="icon-btn" title="Voice call">☎</button>
+                <button onClick={() => startCall('video')} className="icon-btn" title="Video call">▣</button>
               </div>
             </div>
 
-            {/* Encryption tag */}
-            <div className="enc-tag">
-              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
-              <span>END-TO-END ENCRYPTED — ALL MESSAGES ARE PRIVATE</span>
+            <div className="enc-strip">
+              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="var(--text-disabled)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="11" width="18" height="11" rx="2" />
+                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+              </svg>
+              <span className="enc-label">Messages are end-to-end encrypted</span>
             </div>
 
-            {/* Messages */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <div className="messages-scroll">
               {messages.length === 0 ? (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 12 }}>
-                  <div className="avatar-ring" style={{ width: 60, height: 60, fontSize: 22, background: `${getAvatarColor(selectedUser.username)}12`, border: `1px solid ${getAvatarColor(selectedUser.username)}44`, color: getAvatarColor(selectedUser.username) }}>
-                    {selectedUser.username[0].toUpperCase()}
+                <div className="empty-state">
+                  <div className="empty-inner">
+                    <div className="empty-icon">
+                      <div className="avatar" style={{ width: 34, height: 34, fontSize: 14, background: `${getAvatarColor(selectedUser.username)}16`, border: `1px solid ${getAvatarColor(selectedUser.username)}45`, color: getAvatarColor(selectedUser.username) }}>
+                        {selectedUser.username[0].toUpperCase()}
+                      </div>
+                    </div>
+                    <p className="empty-title">{selectedUser.username}</p>
+                    <p className="empty-subtitle">
+                      This conversation is empty. Begin a discreet exchange from this private channel.
+                    </p>
                   </div>
-                  <p style={{ color: 'var(--text-primary)', fontWeight: 600, margin: 0 }}>{selectedUser.username}</p>
-                  <p style={{ fontSize: 10, letterSpacing: 2, color: 'var(--text-muted)', fontFamily: "'Space Mono', monospace", margin: 0 }}>ENCRYPTED CHANNEL OPEN — SAY HELLO</p>
                 </div>
               ) : Object.entries(groupedMessages).map(([date, msgs]) => (
                 <div key={date}>
@@ -833,29 +1294,29 @@ const ChatPage = () => {
                     <span className="date-divider-label">{date}</span>
                     <div className="date-divider-line" />
                   </div>
+
                   {msgs.map((msg, idx) => {
                     const isSent = String(msg.sender._id) === String(currentUserId);
                     const prevMsg = msgs[idx - 1];
                     const isConsecutive = prevMsg && String(prevMsg.sender._id) === String(msg.sender._id);
-                    const fontSize = settings.fontSize === 'small' ? '12px' : settings.fontSize === 'large' ? '16px' : '13.5px';
+                    const fontSize = settings.fontSize === 'small' ? '12px' : settings.fontSize === 'large' ? '15.5px' : '13.5px';
+
                     return (
-                      <div key={msg._id} className="msg-bubble" style={{ display: 'flex', justifyContent: isSent ? 'flex-end' : 'flex-start', alignItems: 'flex-end', gap: 8, marginTop: isConsecutive ? 2 : 12 }}>
+                      <div key={msg._id} className={`msg-bubble msg-row ${isSent ? 'sent' : 'recv'}`} style={{ marginTop: isConsecutive ? 2 : 12 }}>
                         {!isSent && (
-                          <div style={{ width: 26, flexShrink: 0 }}>
+                          <div style={{ width: 28, flexShrink: 0, alignSelf: 'flex-end' }}>
                             {!isConsecutive && (
-                              <div className="avatar-ring" style={{ width: 26, height: 26, fontSize: 10, background: `${getAvatarColor(msg.sender.username)}15`, border: `1px solid ${getAvatarColor(msg.sender.username)}`, color: getAvatarColor(msg.sender.username) }}>
+                              <div className="avatar" style={{ width: 28, height: 28, fontSize: 10, background: `${getAvatarColor(msg.sender.username)}16`, border: `1px solid ${getAvatarColor(msg.sender.username)}45`, color: getAvatarColor(msg.sender.username) }}>
                                 {msg.sender.username[0].toUpperCase()}
                               </div>
                             )}
                           </div>
                         )}
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: isSent ? 'flex-end' : 'flex-start', maxWidth: 320 }}>
+                        <div className="msg-wrap" style={{ display: 'flex', flexDirection: 'column', alignItems: isSent ? 'flex-end' : 'flex-start' }}>
                           <div className={isSent ? 'msg-sent' : 'msg-recv'} style={{ fontSize }}>
                             {msg.message}
                           </div>
-                          <p style={{ fontSize: 9, marginTop: 3, color: 'var(--text-muted)', letterSpacing: 1, opacity: 0, transition: 'opacity 0.2s', fontFamily: "'Space Mono', monospace" }}
-                            onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
-                            onMouseLeave={e => (e.currentTarget.style.opacity = '0')}>
+                          <p className="msg-time" style={{ textAlign: isSent ? 'right' : 'left' }}>
                             {formatTime(msg.createdAt)}
                           </p>
                         </div>
@@ -865,15 +1326,14 @@ const ChatPage = () => {
                 </div>
               ))}
 
-              {/* Typing indicator */}
               {isTyping && (
-                <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, marginTop: 10 }}>
-                  <div className="avatar-ring" style={{ width: 26, height: 26, fontSize: 10, flexShrink: 0, background: `${getAvatarColor(selectedUser.username)}15`, border: `1px solid ${getAvatarColor(selectedUser.username)}`, color: getAvatarColor(selectedUser.username) }}>
+                <div className="msg-row recv" style={{ marginTop: 10 }}>
+                  <div className="avatar" style={{ width: 28, height: 28, fontSize: 10, alignSelf: 'flex-end', flexShrink: 0, background: `${getAvatarColor(selectedUser.username)}16`, border: `1px solid ${getAvatarColor(selectedUser.username)}45`, color: getAvatarColor(selectedUser.username) }}>
                     {selectedUser.username[0].toUpperCase()}
                   </div>
-                  <div style={{ background: 'var(--bg-raised)', border: '1px solid var(--border-mid)', borderRadius: '14px 14px 14px 3px', padding: '10px 14px', display: 'flex', gap: 5, alignItems: 'center' }}>
+                  <div className="typing-bubble">
                     {[0, 0.2, 0.4].map((d, i) => (
-                      <div key={i} style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--red-bright)', animation: `bounce-dot 1.2s ${d}s infinite` }} />
+                      <div key={i} className="typing-dot" style={{ animation: `bounce-dot 1.2s ${d}s infinite` }} />
                     ))}
                   </div>
                 </div>
@@ -881,33 +1341,34 @@ const ChatPage = () => {
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Input */}
-            <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border-dim)' }}>
-              <div className="input-field">
-                <button style={{ color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><path d="M8 14s1.5 2 4 2 4-2 4-2" /><line x1="9" y1="9" x2="9.01" y2="9" /><line x1="15" y1="9" x2="15.01" y2="9" /></svg>
-                </button>
-                <input type="text" value={newMessage} onChange={handleTyping} onKeyDown={handleKeyDown}
-                  placeholder={`Message ${selectedUser.username}...`} />
-                <button onClick={handleSendMessage} disabled={!newMessage.trim()}
-                  className={newMessage.trim() ? 'send-btn-active' : 'send-btn-inactive'}
-                  style={{ width: 32, height: 32 }}>
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" /></svg>
+            <div className="composer-wrap">
+              <div className="composer">
+                <button className="mini-btn">◌</button>
+                <input
+                  type="text"
+                  value={newMessage}
+                  onChange={handleTyping}
+                  onKeyDown={handleKeyDown}
+                  placeholder={`Message ${selectedUser.username}…`}
+                />
+                <button onClick={handleSendMessage} disabled={!newMessage.trim()} className={`send-btn ${newMessage.trim() ? 'active' : 'inactive'}`}>
+                  ➤
                 </button>
               </div>
             </div>
           </>
         ) : (
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ width: 60, height: 60, borderRadius: 16, background: 'var(--bg-raised)', border: '1px solid var(--border-accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--red-deep)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>
+          <div className="empty-state">
+            <div className="empty-inner">
+              <div className="empty-icon">
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                </svg>
               </div>
-              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: 0, marginBottom: 8 }}>
-                <span className="logo-text-cipher" style={{ fontSize: 18 }}>CIPHER</span>
-                <span className="logo-text-chat" style={{ fontSize: 18 }}>CHAT</span>
-              </div>
-              <p style={{ fontSize: 10, letterSpacing: 2, color: 'var(--text-muted)', fontFamily: "'Space Mono', monospace" }}>SELECT A USER TO BEGIN ENCRYPTED CHAT</p>
+              <p className="empty-title">Select a conversation</p>
+              <p className="empty-subtitle">
+                The communication stage opens once you choose a contact from the left rail.
+              </p>
             </div>
           </div>
         )}
