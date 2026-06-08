@@ -3,30 +3,17 @@ import jwt from 'jsonwebtoken';
 import Message from '../models/Message';
 import User from '../models/User';
 
-// Store online users: userId -> socketId
 const onlineUsers = new Map<string, string>();
 
 export const initializeSocket = (io: Server) => {
 
-  // Middleware - verify JWT before connection
   io.use(async (socket: any, next) => {
     try {
       const token = socket.handshake.auth.token;
-
-      if (!token) {
-        return next(new Error('Authentication error'));
-      }
-
-      const decoded = jwt.verify(
-        token,
-        process.env.JWT_SECRET as string
-      ) as { userId: string };
-
+      if (!token) return next(new Error('Authentication error'));
+      const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as { userId: string };
       const user = await User.findById(decoded.userId).select('-password');
-      if (!user) {
-        return next(new Error('User not found'));
-      }
-
+      if (!user) return next(new Error('User not found'));
       socket.userId = decoded.userId;
       socket.user = user;
       next();
@@ -39,78 +26,117 @@ export const initializeSocket = (io: Server) => {
     const userId = socket.userId;
     console.log(`✅ User connected: ${socket.user.username} (${socket.id})`);
 
-    // Add to online users
     onlineUsers.set(userId, socket.id);
-
-    // Update user online status in DB
     await User.findByIdAndUpdate(userId, { isOnline: true, lastSeen: new Date() });
-
-    // Broadcast online users list to everyone
     io.emit('onlineUsers', Array.from(onlineUsers.keys()));
 
     // ─── Send Message ──────────────────────────────
-    socket.on('sendMessage', async (data: {
-      receiverId: string;
-      message: string;
-    }) => {
+    socket.on('sendMessage', async (data: { receiverId: string; message: string }) => {
       try {
-        // Save message to MongoDB
         const newMessage = await Message.create({
           sender: userId,
           receiver: data.receiverId,
           message: data.message,
           messageType: 'text',
         });
-
-        // Populate sender and receiver info
         const populatedMessage = await Message.findById(newMessage._id)
           .populate('sender', 'username avatar')
           .populate('receiver', 'username avatar');
 
-        // FIX: Send to receiver ONLY via receiveMessage event
         const receiverSocketId = onlineUsers.get(data.receiverId);
-        if (receiverSocketId) {
-          io.to(receiverSocketId).emit('receiveMessage', populatedMessage);
-        }
-
-        // FIX: Send back to sender ONLY via messageSent event
-        // This way sender gets exactly ONE event per message sent
+        if (receiverSocketId) io.to(receiverSocketId).emit('receiveMessage', populatedMessage);
         socket.emit('messageSent', populatedMessage);
-
       } catch (error) {
         socket.emit('error', { message: 'Failed to send message' });
       }
     });
 
-    // ─── Typing Indicator ─────────────────────────
+    // ─── Typing ────────────────────────────────────
     socket.on('typing', (data: { receiverId: string }) => {
       const receiverSocketId = onlineUsers.get(data.receiverId);
+      if (receiverSocketId) io.to(receiverSocketId).emit('userTyping', { userId, username: socket.user.username });
+    });
+
+    socket.on('stopTyping', (data: { receiverId: string }) => {
+      const receiverSocketId = onlineUsers.get(data.receiverId);
+      if (receiverSocketId) io.to(receiverSocketId).emit('userStopTyping', { userId });
+    });
+
+    socket.on('markAsRead', async (data: { senderId: string }) => {
+      await Message.updateMany({ sender: data.senderId, receiver: userId, isRead: false }, { isRead: true });
+      const senderSocketId = onlineUsers.get(data.senderId);
+      if (senderSocketId) io.to(senderSocketId).emit('messagesRead', { by: userId });
+    });
+
+    // ════════════════════════════════════════════════
+    // ─── WebRTC CALLING (Real-time) ─────────────────
+    // ════════════════════════════════════════════════
+
+    // Caller sends call-offer to callee
+    socket.on('call:offer', (data: {
+      toUserId: string;
+      offer: any;
+      callType: 'audio' | 'video';
+      callerName: string;
+    }) => {
+      const receiverSocketId = onlineUsers.get(data.toUserId);
       if (receiverSocketId) {
-        io.to(receiverSocketId).emit('userTyping', {
-          userId,
-          username: socket.user.username,
+        io.to(receiverSocketId).emit('call:incoming', {
+          fromUserId: userId,
+          callerName: socket.user.username,
+          offer: data.offer,
+          callType: data.callType,
+        });
+      } else {
+        // Target user is offline
+        socket.emit('call:rejected', { reason: 'User is offline' });
+      }
+    });
+
+    // Callee accepts — sends answer back to caller
+    socket.on('call:answer', (data: {
+      toUserId: string;
+      answer: any;
+    }) => {
+      const callerSocketId = onlineUsers.get(data.toUserId);
+      if (callerSocketId) {
+        io.to(callerSocketId).emit('call:answered', {
+          fromUserId: userId,
+          answer: data.answer,
         });
       }
     });
 
-    // ─── Stop Typing ──────────────────────────────
-    socket.on('stopTyping', (data: { receiverId: string }) => {
-      const receiverSocketId = onlineUsers.get(data.receiverId);
-      if (receiverSocketId) {
-        io.to(receiverSocketId).emit('userStopTyping', { userId });
+    // ICE candidate exchange (both sides)
+    socket.on('call:ice-candidate', (data: {
+      toUserId: string;
+      candidate: any;
+    }) => {
+      const targetSocketId = onlineUsers.get(data.toUserId);
+      if (targetSocketId) {
+        io.to(targetSocketId).emit('call:ice-candidate', {
+          fromUserId: userId,
+          candidate: data.candidate,
+        });
       }
     });
 
-    // ─── Mark Messages as Read ────────────────────
-    socket.on('markAsRead', async (data: { senderId: string }) => {
-      await Message.updateMany(
-        { sender: data.senderId, receiver: userId, isRead: false },
-        { isRead: true }
-      );
+    // Callee rejects call
+    socket.on('call:reject', (data: { toUserId: string }) => {
+      const callerSocketId = onlineUsers.get(data.toUserId);
+      if (callerSocketId) {
+        io.to(callerSocketId).emit('call:rejected', {
+          fromUserId: userId,
+          reason: 'Call declined',
+        });
+      }
+    });
 
-      const senderSocketId = onlineUsers.get(data.senderId);
-      if (senderSocketId) {
-        io.to(senderSocketId).emit('messagesRead', { by: userId });
+    // Either side ends/hangs up
+    socket.on('call:end', (data: { toUserId: string }) => {
+      const targetSocketId = onlineUsers.get(data.toUserId);
+      if (targetSocketId) {
+        io.to(targetSocketId).emit('call:ended', { fromUserId: userId });
       }
     });
 
@@ -118,12 +144,7 @@ export const initializeSocket = (io: Server) => {
     socket.on('disconnect', async () => {
       console.log(`❌ User disconnected: ${socket.user.username}`);
       onlineUsers.delete(userId);
-
-      await User.findByIdAndUpdate(userId, {
-        isOnline: false,
-        lastSeen: new Date(),
-      });
-
+      await User.findByIdAndUpdate(userId, { isOnline: false, lastSeen: new Date() });
       io.emit('onlineUsers', Array.from(onlineUsers.keys()));
     });
   });
