@@ -16,7 +16,7 @@ interface Message {
 type CallState = 'idle' | 'calling' | 'incoming' | 'connected';
 type ActivePanel = 'none' | 'settings' | 'notifications';
 
-const avatarColors = ['#c4a882','#b08060','#d4b896','#a07050','#c8985a','#b87848','#d4a870','#a06840'];
+const avatarColors = ['#c0392b','#e74c3c','#a93226','#922b21','#cb4335','#b03a2e','#d45252','#8e1f1f'];
 const getAvatarColor = (name: string) => {
   let hash = 0;
   for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
@@ -52,7 +52,6 @@ const ChatPage = () => {
   const [notifications, setNotifications] = useState(fakeNotifications);
   const [settings, setSettings] = useState({ notifications: true, sounds: true, encryption: true, readReceipts: true, fontSize: 'medium' });
 
-  // Call states
   const [callState, setCallState] = useState<CallState>('idle');
   const [callType, setCallType] = useState<'audio' | 'video'>('audio');
   const [callDuration, setCallDuration] = useState(0);
@@ -60,7 +59,6 @@ const ChatPage = () => {
   const [isMuted, setIsMuted] = useState(false);
   const [isCameraOff, setIsCameraOff] = useState(false);
 
-  // WebRTC refs
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const localVideoRef = useRef<HTMLVideoElement>(null);
@@ -85,14 +83,9 @@ const ChatPage = () => {
     const pc = new RTCPeerConnection(ICE_SERVERS);
     peerConnectionRef.current = pc;
     pc.onicecandidate = (e) => {
-      if (e.candidate) {
-        const socket = getSocket();
-        socket?.emit('call:ice-candidate', { toUserId: remoteUserId, candidate: e.candidate });
-      }
+      if (e.candidate) { const socket = getSocket(); socket?.emit('call:ice-candidate', { toUserId: remoteUserId, candidate: e.candidate }); }
     };
-    pc.ontrack = (e) => {
-      if (remoteVideoRef.current) remoteVideoRef.current.srcObject = e.streams[0];
-    };
+    pc.ontrack = (e) => { if (remoteVideoRef.current) remoteVideoRef.current.srcObject = e.streams[0]; };
     pc.onconnectionstatechange = () => {
       if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') endCall();
     };
@@ -257,7 +250,7 @@ const ChatPage = () => {
     if (diff === 0) return 'Today'; if (diff === 1) return 'Yesterday';
     return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
   };
-  const formatDur = (s: number) => `${Math.floor(s/60).toString().padStart(2,'0')}:${(s%60).toString().padStart(2,'0')}`;
+  const formatDur = (s: number) => `${Math.floor(s / 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`;
 
   const isOnline = (id: string) => onlineUsers.includes(id);
   const isTyping = selectedUser ? typingUsers.includes(selectedUser._id) : false;
@@ -271,137 +264,345 @@ const ChatPage = () => {
   }, {} as Record<string, Message[]>);
   const unreadNotifCount = notifications.filter(n => !n.read).length;
   const togglePanel = (p: ActivePanel) => setActivePanel(prev => prev === p ? 'none' : p);
-
   const callerUser = incomingCallData ? users.find(u => u._id === incomingCallData.fromUserId) : null;
   const callPartner = callState === 'incoming' ? callerUser : selectedUser;
 
-  // Rose gold color
-  const RG = '#c4a882';
-  const RG_DIM = '#c4a88233';
-  const RG_BORDER = '#c4a88244';
-
   return (
-    <div
-      className="h-screen flex overflow-hidden"
-      style={{ fontFamily: "'Inter', sans-serif", background: '#0B1120' }}
-    >
+    <div className="h-screen flex overflow-hidden" style={{ fontFamily: "'Syne', 'Space Grotesk', sans-serif", background: '#070709' }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap');
         * { box-sizing: border-box; }
-        body { background: #050608; }
-        ::-webkit-scrollbar { width: 3px; }
+
+        /* ── COLOUR TOKENS ── */
+        :root {
+          --bg-void:    #070709;
+          --bg-base:    #0d0d0f;
+          --bg-surface: #111114;
+          --bg-raised:  #18181c;
+          --bg-hover:   #1e1e23;
+
+          --red-deep:   #8b0000;
+          --red-core:   #c0181a;
+          --red-bright: #e8222a;
+          --red-hot:    #ff3b44;
+
+          --chrome-dim: #5a5a6a;
+          --chrome-mid: #9090a8;
+          --chrome-hi:  #d0d0e8;
+          --chrome-pure:#f0f0ff;
+
+          --grad-red:   linear-gradient(135deg, #8b0000 0%, #e8222a 50%, #ff6b35 100%);
+          --grad-chrome:linear-gradient(135deg, #3a3a50 0%, #9090a8 50%, #d0d0e8 100%);
+          --grad-card:  linear-gradient(160deg, #161618 0%, #0d0d10 100%);
+
+          --border-dim:    #ffffff08;
+          --border-mid:    #ffffff14;
+          --border-accent: #c0181a30;
+          --border-hot:    #e8222a55;
+
+          --text-primary:  #f0f0f8;
+          --text-secondary:#9090a8;
+          --text-muted:    #4a4a5a;
+          --text-red:      #ff5058;
+        }
+
+        ::-webkit-scrollbar { width: 2px; }
         ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #c4a88233; border-radius: 4px; }
-        @keyframes bounce { 0%,60%,100% { transform:translateY(0) } 30% { transform:translateY(-4px) } }
-        @keyframes neonPulse { 0%,100% { box-shadow: 0 0 8px #c4a88288 } 50% { box-shadow: 0 0 22px #c4a882, 0 0 40px #c4a88255 } }
-        @keyframes ringOut { 0% { transform:scale(0.7); opacity:1 } 100% { transform:scale(2.2); opacity:0 } }
-        @keyframes scanline { 0% { transform:translateY(-100%) } 100% { transform:translateY(100vh) } }
-        @keyframes fadeSlideIn { from { opacity:0; transform:translateY(8px) } to { opacity:1; transform:translateY(0) } }
-        .msg-in { animation: fadeSlideIn 0.2s ease-out; }
-        .neon-btn { transition: all 0.2s; }
-        .neon-btn:hover { filter: brightness(1.2); }
-        .sidebar-user:hover { background: #1a1412 !important; }
-        .toggle-switch { transition: background 0.2s; }
-        .toggle-thumb { transition: left 0.2s; }
-        video { transform: scaleX(-1); object-fit: cover; }
+        ::-webkit-scrollbar-thumb { background: var(--red-deep); border-radius: 4px; }
+
+        @keyframes pulse-ring {
+          0%   { transform: scale(0.8); opacity: 1; }
+          100% { transform: scale(2.4); opacity: 0; }
+        }
+        @keyframes bounce-dot {
+          0%, 60%, 100% { transform: translateY(0); }
+          30%           { transform: translateY(-5px); }
+        }
+        @keyframes slide-in {
+          from { opacity: 0; transform: translateY(6px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes shimmer {
+          0%   { background-position: -200% center; }
+          100% { background-position:  200% center; }
+        }
+
+        .msg-bubble { animation: slide-in 0.18s ease-out; }
+
+        .user-row {
+          display: flex; align-items: center; gap: 10px;
+          padding: 9px 10px; border-radius: 10px; cursor: pointer;
+          border: 1px solid transparent; transition: all 0.15s; margin-bottom: 2px;
+        }
+        .user-row:hover   { background: var(--bg-hover); border-color: var(--border-mid); }
+        .user-row.active  { background: var(--bg-raised); border-color: var(--border-accent); }
+
+        .tab-btn {
+          flex: 1; padding: 5px 0; font-size: 10px; font-weight: 700;
+          letter-spacing: 2px; border-radius: 7px; cursor: pointer;
+          border: 1px solid transparent; text-align: center;
+          color: var(--text-muted); background: transparent; transition: all 0.15s;
+          font-family: 'Space Mono', monospace;
+        }
+        .tab-btn.active {
+          background: var(--bg-raised); color: var(--red-bright);
+          border-color: var(--border-accent);
+          text-shadow: 0 0 12px var(--red-core);
+        }
+
+        .ctrl-btn {
+          border: 1px solid var(--border-mid); background: var(--bg-raised);
+          color: var(--chrome-mid); border-radius: 8px; cursor: pointer;
+          display: flex; align-items: center; justify-content: center;
+          transition: all 0.15s;
+        }
+        .ctrl-btn:hover { border-color: var(--border-hot); color: var(--red-bright); background: var(--bg-hover); }
+
+        .toggle-track {
+          width: 36px; height: 20px; border-radius: 10px; cursor: pointer;
+          transition: background 0.2s; position: relative; border: none;
+        }
+        .toggle-thumb {
+          position: absolute; top: 2px; width: 16px; height: 16px;
+          border-radius: 50%; transition: left 0.2s;
+        }
+
+        .send-btn-active {
+          background: var(--grad-red); border: none;
+          color: #fff; border-radius: 10px; cursor: pointer;
+          display: flex; align-items: center; justify-content: center;
+          transition: all 0.15s;
+        }
+        .send-btn-active:hover { filter: brightness(1.15); }
+        .send-btn-inactive {
+          background: transparent; border: 1px solid var(--border-mid);
+          color: var(--text-muted); border-radius: 10px; cursor: not-allowed;
+          display: flex; align-items: center; justify-content: center;
+        }
+
+        .logo-text-cipher {
+          background: var(--grad-red);
+          -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+          background-clip: text; font-size: 13px; font-weight: 800; letter-spacing: 3px;
+        }
+        .logo-text-chat {
+          font-size: 13px; font-weight: 800; letter-spacing: 3px;
+          background: var(--grad-chrome);
+          -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+          background-clip: text;
+        }
+
+        .avatar-ring {
+          border-radius: 50%; display: flex; align-items: center;
+          justify-content: center; font-weight: 800; flex-shrink: 0;
+          font-family: 'Space Mono', monospace;
+        }
+
+        .online-dot {
+          position: absolute; bottom: 0; right: 0;
+          width: 9px; height: 9px; border-radius: 50%;
+          background: var(--red-bright);
+          box-shadow: 0 0 6px var(--red-core);
+          border: 2px solid var(--bg-base);
+        }
+
+        .unread-pill {
+          min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px;
+          background: var(--grad-red); color: #fff;
+          font-size: 10px; font-weight: 700;
+          display: flex; align-items: center; justify-content: center;
+          font-family: 'Space Mono', monospace;
+        }
+
+        .msg-sent {
+          background: var(--grad-red); color: #fff; font-weight: 500;
+          border-radius: 16px 16px 3px 16px; padding: 9px 14px;
+          font-size: 13.5px; line-height: 1.55; max-width: 320px;
+        }
+        .msg-recv {
+          background: var(--bg-raised); color: var(--text-primary);
+          border: 1px solid var(--border-mid);
+          border-radius: 16px 16px 16px 3px; padding: 9px 14px;
+          font-size: 13.5px; line-height: 1.55; max-width: 320px;
+        }
+
+        .input-field {
+          background: var(--bg-surface); border: 1px solid var(--border-mid);
+          border-radius: 12px; padding: 11px 14px;
+          display: flex; align-items: center; gap: 10px;
+          transition: border-color 0.2s;
+        }
+        .input-field:focus-within {
+          border-color: var(--red-core);
+          box-shadow: 0 0 0 3px var(--red-deep)22;
+        }
+        .input-field input {
+          flex: 1; background: none; border: none; outline: none;
+          font-size: 13px; color: var(--text-primary);
+          font-family: 'Syne', sans-serif;
+          caret-color: var(--red-bright);
+        }
+        .input-field input::placeholder { color: var(--text-muted); }
+
+        .nav-btn {
+          display: flex; flex-direction: column; align-items: center;
+          gap: 4px; padding: 6px 12px; border-radius: 8px;
+          cursor: pointer; color: var(--text-muted);
+          position: relative; border: none; background: transparent;
+          transition: color 0.15s; font-family: 'Space Mono', monospace;
+        }
+        .nav-btn.active  { color: var(--red-bright); }
+        .nav-btn:hover   { color: var(--chrome-mid); }
+        .nav-badge {
+          position: absolute; top: 0; right: 4px;
+          min-width: 16px; height: 16px; border-radius: 8px;
+          background: var(--grad-red); color: #fff;
+          font-size: 8px; font-weight: 700;
+          display: flex; align-items: center; justify-content: center; padding: 0 4px;
+        }
+
+        .notif-card {
+          padding: 12px; border-radius: 10px; margin-bottom: 6px;
+          transition: all 0.15s;
+        }
+        .notif-card.unread {
+          background: var(--bg-raised); border: 1px solid var(--border-accent);
+        }
+        .notif-card.read {
+          background: transparent; border: 1px solid var(--border-dim);
+        }
+
+        .settings-row {
+          display: flex; align-items: center; justify-content: space-between;
+          padding: 12px 14px; border-radius: 10px; margin-bottom: 6px;
+          background: var(--bg-surface); border: 1px solid var(--border-dim);
+        }
+
+        .call-ring-anim {
+          position: absolute; width: 72px; height: 72px; border-radius: 50%;
+          border: 1.5px solid var(--red-bright);
+          animation: pulse-ring 2s ease-out infinite;
+        }
+
+        .enc-tag {
+          display: flex; align-items: center; justify-content: center; gap: 6px;
+          padding: 4px 0; border-bottom: 1px solid var(--border-dim);
+          background: var(--bg-base);
+        }
+        .enc-tag span {
+          font-size: 9px; letter-spacing: 2.5px; color: var(--text-muted);
+          font-family: 'Space Mono', monospace; font-weight: 700;
+        }
+
+        .date-divider {
+          display: flex; align-items: center; gap: 10px; margin: 12px 0;
+        }
+        .date-divider-line { flex: 1; height: 1px; background: var(--border-dim); }
+        .date-divider-label {
+          font-size: 9px; font-weight: 700; letter-spacing: 2px;
+          color: var(--text-muted); font-family: 'Space Mono', monospace;
+        }
+
+        .profile-block {
+          margin: 8px 10px; padding: 10px 12px; border-radius: 10px;
+          background: var(--bg-raised); border: 1px solid var(--border-accent);
+          display: flex; align-items: center; gap: 10px;
+        }
+
+        .search-wrap {
+          margin: 0 10px 8px; padding: 8px 12px;
+          background: var(--bg-surface); border: 1px solid var(--border-dim);
+          border-radius: 9px; display: flex; align-items: center; gap: 8px;
+          transition: border-color 0.2s;
+        }
+        .search-wrap:focus-within { border-color: var(--border-accent); }
+        .search-wrap input {
+          flex: 1; background: none; border: none; outline: none;
+          font-size: 12px; color: var(--text-primary);
+          font-family: 'Syne', sans-serif;
+        }
+        .search-wrap input::placeholder { color: var(--text-muted); }
       `}</style>
 
-      {/* CALL MODAL */}
+      {/* ── CALL MODAL ── */}
       {callState !== 'idle' && callPartner && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center"
-          style={{ background: 'rgba(0,0,0,0.92)', backdropFilter: 'blur(16px)' }}>
-          <div className="relative w-96 rounded-2xl overflow-hidden flex flex-col items-center"
-            style={{ background: 'linear-gradient(160deg,#0a0806,#120e0a)', border: `1px solid ${RG_BORDER}`, boxShadow: `0 0 60px ${RG_DIM}, 0 30px 80px rgba(0,0,0,0.8)` }}>
-            <div className="w-full px-6 py-3 flex items-center justify-between border-b" style={{ borderColor: RG_BORDER }}>
-              <span className="text-[10px] font-bold tracking-widest" style={{ color: RG + '99' }}>
-                ◉ {callState === 'calling' ? 'OUTGOING' : callState === 'incoming' ? 'INCOMING' : 'CONNECTED'} — {callType.toUpperCase()} CALL
+        <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.95)', backdropFilter: 'blur(20px)' }}>
+          <div style={{ width: 380, borderRadius: 20, overflow: 'hidden', background: 'linear-gradient(160deg,#101012,#080809)', border: '1px solid var(--border-accent)', boxShadow: '0 0 80px #8b000033, 0 40px 100px rgba(0,0,0,0.9)' }}>
+            {/* Modal header */}
+            <div style={{ padding: '12px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border-dim)' }}>
+              <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 3, color: 'var(--text-muted)', fontFamily: "'Space Mono', monospace" }}>
+                {callState === 'calling' ? '◉ OUTGOING' : callState === 'incoming' ? '◉ INCOMING' : '◉ CONNECTED'} — {callType.toUpperCase()}
               </span>
-              <span className="text-[10px]" style={{ color: RG + '55' }}>E2E ENCRYPTED</span>
+              <span style={{ fontSize: 9, letterSpacing: 2, color: 'var(--red-core)', fontFamily: "'Space Mono', monospace" }}>E2E ENCRYPTED</span>
             </div>
 
             {callType === 'video' && callState === 'connected' && (
-              <div className="w-full relative" style={{ height: 200, background: '#020408' }}>
-                <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover" style={{ transform: 'none' }} />
-                <div className="absolute bottom-3 right-3 w-20 h-28 rounded-xl overflow-hidden border" style={{ borderColor: RG_BORDER }}>
-                  <video ref={localVideoRef} autoPlay playsInline muted className="w-full h-full" />
+              <div style={{ width: '100%', height: 200, background: '#050507', position: 'relative' }}>
+                <video ref={remoteVideoRef} autoPlay playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'none' }} />
+                <div style={{ position: 'absolute', bottom: 10, right: 10, width: 80, height: 108, borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border-accent)' }}>
+                  <video ref={localVideoRef} autoPlay playsInline muted style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 </div>
-                {isCameraOff && (
-                  <div className="absolute inset-0 flex items-center justify-center" style={{ background: '#020408ee' }}>
-                    <span className="text-xs" style={{ color: RG + '55' }}>CAMERA OFF</span>
-                  </div>
-                )}
               </div>
             )}
 
-            <div className="flex flex-col items-center px-8 pt-8 pb-2 gap-3 w-full">
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '28px 24px 12px', gap: 10 }}>
               {(callState === 'calling' || callState === 'incoming') && (
-                <div className="relative flex items-center justify-center mb-2">
-                  {[0, 0.5, 1].map(delay => (
-                    <div key={delay} className="absolute w-20 h-20 rounded-full border"
-                      style={{ borderColor: RG + '55', animation: `ringOut 2s ${delay}s ease-out infinite` }} />
+                <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 8 }}>
+                  {[0, 0.6, 1.2].map(delay => (
+                    <div key={delay} className="call-ring-anim" style={{ animationDelay: `${delay}s` }} />
                   ))}
-                  <div className="w-16 h-16 rounded-full flex items-center justify-center text-2xl font-bold relative z-10"
-                    style={{ background: getAvatarColor(callPartner.username) + '22', border: `2px solid ${getAvatarColor(callPartner.username)}`, color: getAvatarColor(callPartner.username) }}>
+                  <div className="avatar-ring" style={{ width: 64, height: 64, fontSize: 22, background: `${getAvatarColor(callPartner.username)}18`, border: `2px solid ${getAvatarColor(callPartner.username)}`, color: getAvatarColor(callPartner.username), position: 'relative', zIndex: 1 }}>
                     {callPartner.username[0].toUpperCase()}
                   </div>
                 </div>
               )}
               {callState === 'connected' && callType === 'audio' && (
-                <div className="w-16 h-16 rounded-full flex items-center justify-center text-2xl font-bold"
-                  style={{ background: getAvatarColor(callPartner.username) + '22', border: `2px solid ${getAvatarColor(callPartner.username)}`, color: getAvatarColor(callPartner.username), animation: 'neonPulse 2s infinite' }}>
+                <div className="avatar-ring" style={{ width: 64, height: 64, fontSize: 22, background: `${getAvatarColor(callPartner.username)}18`, border: `2px solid ${getAvatarColor(callPartner.username)}`, color: getAvatarColor(callPartner.username) }}>
                   {callPartner.username[0].toUpperCase()}
                 </div>
               )}
-              <p className="text-white text-xl font-bold tracking-wide">{callPartner.username}</p>
-              <p className="text-sm flex items-center gap-2" style={{ color: RG + '99' }}>
-                {callState === 'calling' && <><span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse inline-block" /> Ringing...</>}
-                {callState === 'incoming' && <><span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse inline-block" /> Incoming {callType} call</>}
-                {callState === 'connected' && <><span className="w-2 h-2 rounded-full inline-block" style={{ background: RG, boxShadow: `0 0 6px ${RG}` }} /> {formatDur(callDuration)}</>}
+              <p style={{ color: 'var(--text-primary)', fontSize: 18, fontWeight: 700, letterSpacing: 1 }}>{callPartner.username}</p>
+              <p style={{ fontSize: 12, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                {callState === 'calling' && <><span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--red-bright)', display: 'inline-block', animation: 'pulse-ring 1s infinite' }} />Ringing...</>}
+                {callState === 'incoming' && <><span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--red-bright)', display: 'inline-block', animation: 'pulse-ring 1s infinite' }} />Incoming {callType} call</>}
+                {callState === 'connected' && <><span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--red-bright)', display: 'inline-block', boxShadow: '0 0 6px var(--red-bright)' }} />{formatDur(callDuration)}</>}
               </p>
             </div>
 
-            <div className="flex items-center justify-center gap-5 px-8 pb-8 pt-4 w-full">
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16, padding: '12px 24px 28px' }}>
               {callState === 'connected' && (
                 <>
-                  <button onClick={toggleMute} className="w-12 h-12 rounded-full flex items-center justify-center neon-btn"
-                    style={{ background: isMuted ? '#ff006e22' : '#1a1412', border: `1px solid ${isMuted ? '#ff006e' : RG_BORDER}`, color: isMuted ? '#ff006e' : RG }}>
+                  <button onClick={toggleMute} className="ctrl-btn" style={{ width: 48, height: 48, ...(isMuted ? { background: '#ff000022', borderColor: '#ff3b44', color: '#ff3b44' } : {}) }}>
                     {isMuted
                       ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
-                      : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
-                    }
+                      : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>}
                   </button>
-                  <button onClick={endCall} className="w-14 h-14 rounded-full flex items-center justify-center neon-btn"
-                    style={{ background: '#ff006e', boxShadow: '0 0 20px #ff006e88', color: 'white' }}>
+                  <button onClick={endCall} style={{ width: 56, height: 56, borderRadius: '50%', background: 'var(--grad-red)', border: 'none', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 0 24px var(--red-deep)' }}>
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="white"><path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1-9.4 0-17-7.6-17-17 0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z"/></svg>
                   </button>
                   {callType === 'video' && (
-                    <button onClick={toggleCamera} className="w-12 h-12 rounded-full flex items-center justify-center neon-btn"
-                      style={{ background: isCameraOff ? '#ff006e22' : '#1a1412', border: `1px solid ${isCameraOff ? '#ff006e' : RG_BORDER}`, color: isCameraOff ? '#ff006e' : RG }}>
+                    <button onClick={toggleCamera} className="ctrl-btn" style={{ width: 48, height: 48, ...(isCameraOff ? { background: '#ff000022', borderColor: '#ff3b44', color: '#ff3b44' } : {}) }}>
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         {isCameraOff
                           ? <><line x1="1" y1="1" x2="23" y2="23"/><path d="M21 21H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3m3-3h6l2 3h2a2 2 0 0 1 2 2v9.34"/></>
-                          : <><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></>
-                        }
+                          : <><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></>}
                       </svg>
                     </button>
                   )}
                 </>
               )}
               {callState === 'calling' && (
-                <button onClick={endCall} className="w-14 h-14 rounded-full flex items-center justify-center neon-btn"
-                  style={{ background: '#ff006e', boxShadow: '0 0 20px #ff006e88', color: 'white' }}>
+                <button onClick={endCall} style={{ width: 56, height: 56, borderRadius: '50%', background: 'var(--grad-red)', border: 'none', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 0 24px var(--red-deep)' }}>
                   <svg width="22" height="22" viewBox="0 0 24 24" fill="white"><path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1-9.4 0-17-7.6-17-17 0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z"/></svg>
                 </button>
               )}
               {callState === 'incoming' && (
                 <>
-                  <button onClick={rejectCall} className="w-14 h-14 rounded-full flex items-center justify-center neon-btn"
-                    style={{ background: '#ff006e22', border: '2px solid #ff006e', color: '#ff006e' }}>
+                  <button onClick={rejectCall} style={{ width: 56, height: 56, borderRadius: '50%', background: '#ff000018', border: '2px solid var(--red-bright)', color: 'var(--red-bright)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1-9.4 0-17-7.6-17-17 0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z"/></svg>
                   </button>
-                  <button onClick={acceptCall} className="w-14 h-14 rounded-full flex items-center justify-center neon-btn"
-                    style={{ background: RG_DIM, border: `2px solid ${RG}`, color: RG }}>
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1-9.4 0-17-7.6-17-17 0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z"/></svg>
+                  <button onClick={acceptCall} style={{ width: 56, height: 56, borderRadius: '50%', background: 'var(--grad-red)', border: 'none', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 0 24px var(--red-deep)' }}>
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="white"><path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1-9.4 0-17-7.6-17-17 0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z"/></svg>
                   </button>
                 </>
               )}
@@ -410,187 +611,167 @@ const ChatPage = () => {
         </div>
       )}
 
-      {/* SIDEBAR */}
-      <div className="w-[280px] flex flex-col shrink-0" style={{ background: '#07090e', borderRight: '1px solid #1e1a1618' }}>
+      {/* ── SIDEBAR ── */}
+      <div style={{ width: 272, minWidth: 272, background: 'var(--bg-base)', borderRight: '1px solid var(--border-dim)', display: 'flex', flexDirection: 'column' }}>
 
-        {/* App Header */}
-        <div className="px-5 pt-5 pb-4 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: RG_DIM, border: `1px solid ${RG_BORDER}` }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={RG} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-              </svg>
+        {/* Header */}
+        <div style={{ padding: '16px 14px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border-dim)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ width: 30, height: 30, borderRadius: 8, background: 'var(--bg-raised)', border: '1px solid var(--border-accent)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--red-bright)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>
             </div>
-            <div>
-              <span className="font-bold text-sm tracking-widest" style={{ color: RG }}>{`CIPHER`}</span>
-              <span className="font-bold text-sm tracking-widest text-white">CHAT</span>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 0 }}>
+              <span className="logo-text-cipher">CIPHER</span>
+              <span className="logo-text-chat">CHAT</span>
             </div>
           </div>
-          <button onClick={() => { logout(); navigate('/login'); }} title="Logout"
-            className="w-8 h-8 flex items-center justify-center rounded-lg neon-btn" style={{ color: '#ff006e', border: '1px solid #ff006e33' }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
-            </svg>
+          <button onClick={() => { logout(); navigate('/login'); }} className="ctrl-btn" style={{ width: 28, height: 28, color: 'var(--text-red)', borderColor: '#ff3b4422' }} title="Logout">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></svg>
           </button>
         </div>
 
         {/* Profile */}
-        <div className="mx-3 mb-3 p-3 rounded-xl flex items-center gap-3" style={{ background: RG_DIM, border: `1px solid ${RG_BORDER}` }}>
-          <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold shrink-0"
-            style={{ background: getAvatarColor(currentUsername) + '22', border: `1.5px solid ${getAvatarColor(currentUsername)}`, color: getAvatarColor(currentUsername) }}>
+        <div className="profile-block">
+          <div className="avatar-ring" style={{ width: 36, height: 36, fontSize: 13, background: `${getAvatarColor(currentUsername)}18`, border: `1.5px solid ${getAvatarColor(currentUsername)}`, color: getAvatarColor(currentUsername) }}>
             {currentUsername[0].toUpperCase()}
           </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-white text-sm font-semibold truncate">{currentUsername}</p>
-            <p className="text-xs flex items-center gap-1" style={{ color: RG + '88' }}>
-              <span className="w-1.5 h-1.5 rounded-full inline-block" style={{ background: RG }} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p style={{ color: 'var(--text-primary)', fontSize: 13, fontWeight: 600, margin: 0 }}>{currentUsername}</p>
+            <p style={{ fontSize: 11, color: 'var(--red-core)', display: 'flex', alignItems: 'center', gap: 4, margin: '2px 0 0' }}>
+              <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--red-bright)', boxShadow: '0 0 5px var(--red-bright)', display: 'inline-block' }} />
               Online — Encrypted
             </p>
           </div>
         </div>
 
         {/* Search */}
-        <div className="px-3 pb-3">
-          <div className="flex items-center gap-2 rounded-xl px-3 py-2.5" style={{ background: '#0d1117', border: `1px solid ${RG_BORDER}` }}>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={RG + '55'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-            </svg>
-            <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-              placeholder="Search..." className="bg-transparent text-sm text-white focus:outline-none flex-1"
-              style={{ color: 'white' }} />
-          </div>
+        <div className="search-wrap">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
+          <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search..." />
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 px-3 mb-2">
-          {['All','Unread','DMs'].map(tab => (
-            <button key={tab} onClick={() => setActiveTab(tab)}
-              className="flex-1 text-xs py-1.5 rounded-lg font-medium tracking-wide transition-all"
-              style={activeTab === tab
-                ? { background: RG_DIM, color: RG, border: `1px solid ${RG_BORDER}` }
-                : { color: RG + '33', border: '1px solid transparent' }}>
-              {tab}
-            </button>
+        <div style={{ display: 'flex', gap: 4, padding: '0 10px 8px' }}>
+          {['All', 'Unread', 'DMs'].map(tab => (
+            <button key={tab} className={`tab-btn${activeTab === tab ? ' active' : ''}`} onClick={() => setActiveTab(tab)}>{tab.toUpperCase()}</button>
           ))}
         </div>
 
-        {/* Users */}
-        <div className="flex-1 overflow-y-auto px-2 space-y-0.5 pb-2">
-          {filteredUsers.length === 0 ? (
-            <div className="text-center py-10"><p className="text-xs" style={{ color: RG + '33' }}>NO USERS FOUND</p></div>
-          ) : filteredUsers.map(u => (
-            <div key={u._id}
-              onClick={() => { setSelectedUser(u); setUnreadCounts(prev => ({ ...prev, [u._id]: 0 })); }}
-              className="sidebar-user flex items-center gap-3 px-3 py-2.5 rounded-xl cursor-pointer transition-all"
-              style={selectedUser?._id === u._id ? { background: RG_DIM, border: `1px solid ${RG_BORDER}` } : { border: '1px solid transparent' }}>
-              <div className="relative shrink-0">
-                <div className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold"
-                  style={{ background: getAvatarColor(u.username) + '22', border: `1.5px solid ${getAvatarColor(u.username)}`, color: getAvatarColor(u.username) }}>
-                  {u.username[0].toUpperCase()}
+        {/* User list */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '0 6px 6px' }}>
+          {filteredUsers.length === 0
+            ? <div style={{ textAlign: 'center', paddingTop: 32, color: 'var(--text-muted)', fontSize: 11, letterSpacing: 2, fontFamily: "'Space Mono', monospace" }}>NO USERS</div>
+            : filteredUsers.map(u => (
+              <div key={u._id} className={`user-row${selectedUser?._id === u._id ? ' active' : ''}`}
+                onClick={() => { setSelectedUser(u); setUnreadCounts(prev => ({ ...prev, [u._id]: 0 })); }}>
+                <div style={{ position: 'relative', flexShrink: 0 }}>
+                  <div className="avatar-ring" style={{ width: 38, height: 38, fontSize: 13, background: `${getAvatarColor(u.username)}15`, border: `1.5px solid ${getAvatarColor(u.username)}`, color: getAvatarColor(u.username) }}>
+                    {u.username[0].toUpperCase()}
+                  </div>
+                  {isOnline(u._id) && <div className="online-dot" />}
                 </div>
-                {isOnline(u._id) && (
-                  <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2"
-                    style={{ background: RG, borderColor: '#07090e' }} />
-                )}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-medium text-white truncate">{u.username}</p>
-                  {unreadCounts[u._id] > 0 && (
-                    <span className="shrink-0 min-w-5 h-5 px-1.5 rounded-full text-xs flex items-center justify-center font-bold"
-                      style={{ background: RG, color: '#0a0806' }}>
-                      {unreadCounts[u._id] > 9 ? '9+' : unreadCounts[u._id]}
-                    </span>
-                  )}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <p style={{ color: 'var(--text-primary)', fontSize: 13, fontWeight: 500, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.username}</p>
+                    {(unreadCounts[u._id] ?? 0) > 0 && (
+                      <div className="unread-pill">{unreadCounts[u._id] > 9 ? '9+' : unreadCounts[u._id]}</div>
+                    )}
+                  </div>
+                  <p style={{ fontSize: 11, marginTop: 2, color: isOnline(u._id) ? 'var(--red-core)' : 'var(--text-muted)' }}>
+                    {isOnline(u._id) ? '● Online' : '○ Offline'}
+                  </p>
                 </div>
-                <p className="text-xs truncate mt-0.5" style={{ color: isOnline(u._id) ? RG + '88' : '#ffffff22' }}>
-                  {isOnline(u._id) ? '● Online' : '○ offline'}
-                </p>
               </div>
-            </div>
-          ))}
+            ))}
         </div>
 
-        {/* Bottom Nav */}
-        <div className="px-3 py-3 flex items-center justify-around" style={{ borderTop: `1px solid ${RG_BORDER}` }}>
+        {/* Bottom nav */}
+        <div style={{ borderTop: '1px solid var(--border-dim)', padding: '8px 4px', display: 'flex', justifyContent: 'space-around' }}>
           {[
-            { id: 'chats', label: 'CHATS', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>, badge: 0 },
-            { id: 'notifications', label: 'ALERTS', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>, badge: unreadNotifCount },
-            { id: 'settings', label: 'CONFIG', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>, badge: 0 },
-          ].map(({ id, label, icon, badge }) => {
+            {
+              id: 'chats', label: 'CHATS', badge: 0,
+              icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
+            },
+            {
+              id: 'notifications', label: 'ALERTS', badge: unreadNotifCount,
+              icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" /></svg>
+            },
+            {
+              id: 'settings', label: 'CONFIG', badge: 0,
+              icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg>
+            },
+          ].map(({ id, label, badge, icon }) => {
             const isActive = id === 'chats' ? activePanel === 'none' : activePanel === id;
             return (
-              <button key={id} onClick={() => id !== 'chats' && togglePanel(id as ActivePanel)}
-                className="flex flex-col items-center gap-1 px-2 py-1.5 rounded-lg relative neon-btn"
-                style={{ color: isActive ? RG : RG + '33' }}>
-                {badge > 0 && (
-                  <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full text-[9px] flex items-center justify-center font-bold"
-                    style={{ background: RG, color: '#0a0806' }}>
-                    {badge}
-                  </span>
-                )}
+              <button key={id} className={`nav-btn${isActive ? ' active' : ''}`}
+                onClick={() => id !== 'chats' && togglePanel(id as ActivePanel)}>
+                {badge > 0 && <div className="nav-badge">{badge}</div>}
                 {icon}
-                <span className="text-[9px] font-bold tracking-widest">{label}</span>
+                <span style={{ fontSize: 8, fontWeight: 700, letterSpacing: 2 }}>{label}</span>
               </button>
             );
           })}
         </div>
       </div>
 
-      {/* NOTIFICATIONS PANEL */}
+      {/* ── NOTIFICATIONS PANEL ── */}
       {activePanel === 'notifications' && (
-        <div className="w-[260px] flex flex-col shrink-0" style={{ background: '#07090e', borderRight: `1px solid ${RG_BORDER}` }}>
-          <div className="px-5 pt-5 pb-3 flex items-center justify-between">
-            <h3 className="text-xs font-bold tracking-widest" style={{ color: RG }}>NOTIFICATIONS</h3>
+        <div style={{ width: 256, minWidth: 256, background: 'var(--bg-base)', borderRight: '1px solid var(--border-dim)', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ padding: '16px 16px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border-dim)' }}>
+            <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 3, color: 'var(--red-bright)', fontFamily: "'Space Mono', monospace" }}>NOTIFICATIONS</span>
             <button onClick={() => setNotifications(p => p.map(n => ({ ...n, read: true })))}
-              className="text-[10px] tracking-wider neon-btn" style={{ color: RG + '55' }}>CLEAR ALL</button>
+              style={{ fontSize: 9, letterSpacing: 2, color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: "'Space Mono', monospace" }}>
+              CLEAR ALL
+            </button>
           </div>
-          <div className="flex-1 overflow-y-auto px-3 space-y-2">
+          <div style={{ flex: 1, overflowY: 'auto', padding: '10px 10px' }}>
             {notifications.map(n => (
-              <div key={n.id} className="p-3 rounded-xl"
-                style={{ background: n.read ? 'transparent' : RG_DIM, border: `1px solid ${n.read ? RG + '11' : RG_BORDER}` }}>
-                <p className="text-xs" style={{ color: n.read ? '#ffffff44' : '#fff0e8' }}>{n.text}</p>
-                <p className="text-[10px] mt-1 tracking-wider" style={{ color: RG + '33' }}>{n.time}</p>
+              <div key={n.id} className={`notif-card ${n.read ? 'read' : 'unread'}`}>
+                <p style={{ fontSize: 12, color: n.read ? 'var(--text-muted)' : 'var(--text-primary)', margin: 0 }}>{n.text}</p>
+                <p style={{ fontSize: 9, marginTop: 5, letterSpacing: 2, color: 'var(--text-muted)', fontFamily: "'Space Mono', monospace" }}>{n.time}</p>
               </div>
             ))}
           </div>
         </div>
       )}
 
-      {/* SETTINGS PANEL */}
+      {/* ── SETTINGS PANEL ── */}
       {activePanel === 'settings' && (
-        <div className="w-[260px] flex flex-col shrink-0" style={{ background: '#07090e', borderRight: `1px solid ${RG_BORDER}` }}>
-          <div className="px-5 pt-5 pb-3">
-            <h3 className="text-xs font-bold tracking-widest" style={{ color: RG }}>CONFIG</h3>
+        <div style={{ width: 256, minWidth: 256, background: 'var(--bg-base)', borderRight: '1px solid var(--border-dim)', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ padding: '16px 16px 12px', borderBottom: '1px solid var(--border-dim)' }}>
+            <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 3, color: 'var(--red-bright)', fontFamily: "'Space Mono', monospace" }}>CONFIG</span>
           </div>
-          <div className="flex-1 overflow-y-auto px-3 space-y-2 pb-4">
+          <div style={{ flex: 1, overflowY: 'auto', padding: '10px 10px' }}>
             {[
               { key: 'notifications', label: 'PUSH ALERTS' },
               { key: 'sounds', label: 'SOUND FX' },
               { key: 'encryption', label: 'E2E ENCRYPT' },
               { key: 'readReceipts', label: 'READ RECEIPTS' },
             ].map(({ key, label }) => (
-              <div key={key} className="flex items-center justify-between p-3 rounded-xl"
-                style={{ background: '#0d1117', border: `1px solid ${RG_BORDER}` }}>
-                <span className="text-[11px] font-bold tracking-widest" style={{ color: RG + '88' }}>{label}</span>
-                <button onClick={() => setSettings(p => ({ ...p, [key]: !(p as any)[key] }))}
-                  className="relative w-9 h-5 rounded-full toggle-switch"
-                  style={{ background: (settings as any)[key] ? RG : '#1a1a2e' }}>
-                  <span className="absolute top-0.5 w-4 h-4 rounded-full shadow toggle-thumb"
-                    style={{ left: (settings as any)[key] ? '18px' : '2px', background: (settings as any)[key] ? '#0a0806' : '#ffffff66' }} />
+              <div key={key} className="settings-row">
+                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 2, color: 'var(--text-secondary)', fontFamily: "'Space Mono', monospace" }}>{label}</span>
+                <button className="toggle-track"
+                  style={{ background: (settings as any)[key] ? 'var(--red-deep)' : 'var(--bg-hover)' }}
+                  onClick={() => setSettings(p => ({ ...p, [key]: !(p as any)[key] }))}>
+                  <span className="toggle-thumb"
+                    style={{ left: (settings as any)[key] ? '18px' : '2px', background: (settings as any)[key] ? 'var(--red-bright)' : 'var(--chrome-dim)' }} />
                 </button>
               </div>
             ))}
-            <div className="p-3 rounded-xl" style={{ background: '#0d1117', border: `1px solid ${RG_BORDER}` }}>
-              <p className="text-[11px] font-bold tracking-widest mb-2" style={{ color: RG + '88' }}>FONT SIZE</p>
-              <div className="flex gap-1.5">
-                {['small','medium','large'].map(size => (
-                  <button key={size} onClick={() => setSettings(p => ({ ...p, fontSize: size }))}
-                    className="flex-1 py-1.5 rounded-lg text-[10px] font-bold tracking-widest capitalize transition-all"
-                    style={settings.fontSize === size
-                      ? { background: RG, color: '#0a0806' }
-                      : { background: '#0a1412', color: RG + '55', border: `1px solid ${RG_BORDER}` }}>
-                    {size[0].toUpperCase()}
+            <div className="settings-row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 10 }}>
+              <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 2, color: 'var(--text-secondary)', fontFamily: "'Space Mono', monospace" }}>FONT SIZE</span>
+              <div style={{ display: 'flex', gap: 6, width: '100%' }}>
+                {['small', 'medium', 'large'].map(sz => (
+                  <button key={sz} onClick={() => setSettings(p => ({ ...p, fontSize: sz }))}
+                    style={{
+                      flex: 1, padding: '6px 0', borderRadius: 7, fontSize: 10, fontWeight: 700,
+                      letterSpacing: 1, textTransform: 'capitalize', cursor: 'pointer',
+                      fontFamily: "'Space Mono', monospace",
+                      ...(settings.fontSize === sz
+                        ? { background: 'var(--grad-red)', color: '#fff', border: 'none' }
+                        : { background: 'var(--bg-hover)', color: 'var(--text-muted)', border: '1px solid var(--border-mid)' })
+                    }}>
+                    {sz[0].toUpperCase()}
                   </button>
                 ))}
               </div>
@@ -599,97 +780,82 @@ const ChatPage = () => {
         </div>
       )}
 
-      {/* CHAT AREA */}
-      <div className="flex-1 flex flex-col overflow-hidden" style={{ background: '#050608' }}>
+      {/* ── CHAT AREA ── */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--bg-void)' }}>
         {selectedUser ? (
           <>
-            {/* Header */}
-            <div className="flex items-center justify-between px-6 py-3.5" style={{ background: '#07090e', borderBottom: `1px solid ${RG_BORDER}` }}>
-              <div className="flex items-center gap-3">
-                <div className="relative">
-                  <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold"
-                    style={{ background: getAvatarColor(selectedUser.username) + '22', border: `1.5px solid ${getAvatarColor(selectedUser.username)}`, color: getAvatarColor(selectedUser.username) }}>
+            {/* Chat header */}
+            <div style={{ padding: '12px 20px', background: 'var(--bg-base)', borderBottom: '1px solid var(--border-dim)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ position: 'relative' }}>
+                  <div className="avatar-ring" style={{ width: 36, height: 36, fontSize: 13, background: `${getAvatarColor(selectedUser.username)}15`, border: `1.5px solid ${getAvatarColor(selectedUser.username)}`, color: getAvatarColor(selectedUser.username) }}>
                     {selectedUser.username[0].toUpperCase()}
                   </div>
-                  {isOnline(selectedUser._id) && (
-                    <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2"
-                      style={{ background: RG, borderColor: '#07090e' }} />
-                  )}
+                  {isOnline(selectedUser._id) && <div className="online-dot" style={{ borderColor: 'var(--bg-base)' }} />}
                 </div>
                 <div>
-                  <p className="text-white font-semibold text-sm">{selectedUser.username}</p>
-                  <p className="text-xs" style={{ color: isTyping ? RG : isOnline(selectedUser._id) ? RG + '88' : '#ffffff22' }}>
-                    {isTyping ? '▮ typing...' : isOnline(selectedUser._id) ? '◉ Online' : '○ offline'}
+                  <p style={{ color: 'var(--text-primary)', fontSize: 14, fontWeight: 600, margin: 0 }}>{selectedUser.username}</p>
+                  <p style={{ fontSize: 11, margin: '2px 0 0', color: isTyping ? 'var(--red-bright)' : isOnline(selectedUser._id) ? 'var(--red-core)' : 'var(--text-muted)' }}>
+                    {isTyping ? '▮ typing...' : isOnline(selectedUser._id) ? '◉ Online' : '○ Offline'}
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-1">
-                <button onClick={() => startCall('audio')}
-                  className="w-8 h-8 flex items-center justify-center rounded-lg neon-btn"
-                  style={{ color: RG, border: `1px solid ${RG_BORDER}` }}>
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.71 3.35 2 2 0 0 1 3.71 1.19h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 8.91a16 16 0 0 0 6 6l.86-.86a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21.73 16.92z"/>
-                  </svg>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button onClick={() => startCall('audio')} className="ctrl-btn" style={{ width: 32, height: 32 }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.71 3.35 2 2 0 0 1 3.71 1.19h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 8.91a16 16 0 0 0 6 6l.86-.86a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21.73 16.92z" /></svg>
                 </button>
-                <button onClick={() => startCall('video')}
-                  className="w-8 h-8 flex items-center justify-center rounded-lg neon-btn"
-                  style={{ color: RG, border: `1px solid ${RG_BORDER}` }}>
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
-                  </svg>
+                <button onClick={() => startCall('video')} className="ctrl-btn" style={{ width: 32, height: 32 }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="23 7 16 12 23 17 23 7" /><rect x="1" y="5" width="15" height="14" rx="2" ry="2" /></svg>
                 </button>
               </div>
             </div>
 
+            {/* Encryption tag */}
+            <div className="enc-tag">
+              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
+              <span>END-TO-END ENCRYPTED — ALL MESSAGES ARE PRIVATE</span>
+            </div>
+
             {/* Messages */}
-            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-1">
+            <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 2 }}>
               {messages.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full gap-3">
-                  <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-2xl font-bold"
-                    style={{ background: getAvatarColor(selectedUser.username) + '15', border: `1px solid ${getAvatarColor(selectedUser.username)}44`, color: getAvatarColor(selectedUser.username) }}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 12 }}>
+                  <div className="avatar-ring" style={{ width: 60, height: 60, fontSize: 22, background: `${getAvatarColor(selectedUser.username)}12`, border: `1px solid ${getAvatarColor(selectedUser.username)}44`, color: getAvatarColor(selectedUser.username) }}>
                     {selectedUser.username[0].toUpperCase()}
                   </div>
-                  <p className="text-white font-semibold">{selectedUser.username}</p>
-                  <p className="text-xs tracking-widest" style={{ color: RG + '44' }}>ENCRYPTED CHANNEL OPEN — SAY HELLO</p>
+                  <p style={{ color: 'var(--text-primary)', fontWeight: 600, margin: 0 }}>{selectedUser.username}</p>
+                  <p style={{ fontSize: 10, letterSpacing: 2, color: 'var(--text-muted)', fontFamily: "'Space Mono', monospace", margin: 0 }}>ENCRYPTED CHANNEL OPEN — SAY HELLO</p>
                 </div>
               ) : Object.entries(groupedMessages).map(([date, msgs]) => (
                 <div key={date}>
-                  <div className="flex items-center gap-3 py-3">
-                    <div className="flex-1 h-px" style={{ background: RG_BORDER }} />
-                    <span className="text-[10px] font-bold tracking-widest" style={{ color: RG + '44' }}>{date}</span>
-                    <div className="flex-1 h-px" style={{ background: RG_BORDER }} />
+                  <div className="date-divider">
+                    <div className="date-divider-line" />
+                    <span className="date-divider-label">{date}</span>
+                    <div className="date-divider-line" />
                   </div>
                   {msgs.map((msg, idx) => {
                     const isSent = String(msg.sender._id) === String(currentUserId);
                     const prevMsg = msgs[idx - 1];
                     const isConsecutive = prevMsg && String(prevMsg.sender._id) === String(msg.sender._id);
-                    const fontSize = settings.fontSize === 'small' ? '12px' : settings.fontSize === 'large' ? '16px' : '14px';
+                    const fontSize = settings.fontSize === 'small' ? '12px' : settings.fontSize === 'large' ? '16px' : '13.5px';
                     return (
-                      <div key={msg._id} className={`msg-in flex ${isSent ? 'justify-end' : 'justify-start'} ${isConsecutive ? 'mt-0.5' : 'mt-3'}`}>
+                      <div key={msg._id} className="msg-bubble" style={{ display: 'flex', justifyContent: isSent ? 'flex-end' : 'flex-start', alignItems: 'flex-end', gap: 8, marginTop: isConsecutive ? 2 : 12 }}>
                         {!isSent && (
-                          <div className="w-7 shrink-0 mr-2 self-end">
+                          <div style={{ width: 26, flexShrink: 0 }}>
                             {!isConsecutive && (
-                              <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold"
-                                style={{ background: getAvatarColor(msg.sender.username) + '22', border: `1px solid ${getAvatarColor(msg.sender.username)}`, color: getAvatarColor(msg.sender.username) }}>
+                              <div className="avatar-ring" style={{ width: 26, height: 26, fontSize: 10, background: `${getAvatarColor(msg.sender.username)}15`, border: `1px solid ${getAvatarColor(msg.sender.username)}`, color: getAvatarColor(msg.sender.username) }}>
                                 {msg.sender.username[0].toUpperCase()}
                               </div>
                             )}
                           </div>
                         )}
-                        <div className={`max-w-sm group flex flex-col ${isSent ? 'items-end' : 'items-start'}`}>
-                          <div className="px-4 py-2.5 leading-relaxed"
-                            style={{
-                              fontSize,
-                              color: isSent ? '#0a0806' : '#f0e8e0',
-                              borderRadius: isSent ? '16px 16px 3px 16px' : '16px 16px 16px 3px',
-                              background: isSent ? RG : '#1a1412',
-                              border: isSent ? 'none' : `1px solid ${RG_BORDER}`,
-                              fontWeight: isSent ? 600 : 400,
-                            }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: isSent ? 'flex-end' : 'flex-start', maxWidth: 320 }}>
+                          <div className={isSent ? 'msg-sent' : 'msg-recv'} style={{ fontSize }}>
                             {msg.message}
                           </div>
-                          <p className="text-[10px] mt-1 px-1 tracking-wider opacity-0 group-hover:opacity-100 transition-opacity"
-                            style={{ color: RG + '44' }}>
+                          <p style={{ fontSize: 9, marginTop: 3, color: 'var(--text-muted)', letterSpacing: 1, opacity: 0, transition: 'opacity 0.2s', fontFamily: "'Space Mono', monospace" }}
+                            onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
+                            onMouseLeave={e => (e.currentTarget.style.opacity = '0')}>
                             {formatTime(msg.createdAt)}
                           </p>
                         </div>
@@ -698,17 +864,16 @@ const ChatPage = () => {
                   })}
                 </div>
               ))}
+
+              {/* Typing indicator */}
               {isTyping && (
-                <div className="flex items-end gap-2 mt-3">
-                  <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
-                    style={{ background: getAvatarColor(selectedUser.username) + '22', border: `1px solid ${getAvatarColor(selectedUser.username)}`, color: getAvatarColor(selectedUser.username) }}>
+                <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, marginTop: 10 }}>
+                  <div className="avatar-ring" style={{ width: 26, height: 26, fontSize: 10, flexShrink: 0, background: `${getAvatarColor(selectedUser.username)}15`, border: `1px solid ${getAvatarColor(selectedUser.username)}`, color: getAvatarColor(selectedUser.username) }}>
                     {selectedUser.username[0].toUpperCase()}
                   </div>
-                  <div className="rounded-2xl rounded-bl-sm px-4 py-3 flex gap-1 items-center"
-                    style={{ background: '#1a1412', border: `1px solid ${RG_BORDER}` }}>
+                  <div style={{ background: 'var(--bg-raised)', border: '1px solid var(--border-mid)', borderRadius: '14px 14px 14px 3px', padding: '10px 14px', display: 'flex', gap: 5, alignItems: 'center' }}>
                     {[0, 0.2, 0.4].map((d, i) => (
-                      <div key={i} className="w-1.5 h-1.5 rounded-full"
-                        style={{ background: RG, animation: `bounce 1.2s ${d}s infinite` }} />
+                      <div key={i} style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--red-bright)', animation: `bounce-dot 1.2s ${d}s infinite` }} />
                     ))}
                   </div>
                 </div>
@@ -717,45 +882,32 @@ const ChatPage = () => {
             </div>
 
             {/* Input */}
-            <div className="px-5 py-4" style={{ borderTop: `1px solid ${RG_BORDER}` }}>
-              <div className="flex items-center gap-3 rounded-2xl px-4 py-3" style={{ background: '#0d1117', border: `1px solid ${RG_BORDER}` }}>
-                <button className="shrink-0 neon-btn" style={{ color: RG + '44' }}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/>
-                  </svg>
+            <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border-dim)' }}>
+              <div className="input-field">
+                <button style={{ color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><path d="M8 14s1.5 2 4 2 4-2 4-2" /><line x1="9" y1="9" x2="9.01" y2="9" /><line x1="15" y1="9" x2="15.01" y2="9" /></svg>
                 </button>
                 <input type="text" value={newMessage} onChange={handleTyping} onKeyDown={handleKeyDown}
-                  placeholder={`Message ${selectedUser.username}...`}
-                  className="flex-1 bg-transparent text-white focus:outline-none text-sm"
-                  style={{ caretColor: RG }}
-                  onFocus={e => { e.currentTarget.parentElement!.style.borderColor = RG + '88'; }}
-                  onBlur={e => { e.currentTarget.parentElement!.style.borderColor = RG_BORDER; }} />
+                  placeholder={`Message ${selectedUser.username}...`} />
                 <button onClick={handleSendMessage} disabled={!newMessage.trim()}
-                  className="w-8 h-8 rounded-xl flex items-center justify-center neon-btn shrink-0"
-                  style={{
-                    background: newMessage.trim() ? RG : '#0d1117',
-                    color: newMessage.trim() ? '#0a0806' : RG + '22',
-                    border: newMessage.trim() ? 'none' : `1px solid ${RG_BORDER}`,
-                    cursor: newMessage.trim() ? 'pointer' : 'not-allowed',
-                  }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
-                  </svg>
+                  className={newMessage.trim() ? 'send-btn-active' : 'send-btn-inactive'}
+                  style={{ width: 32, height: 32 }}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" /></svg>
                 </button>
               </div>
             </div>
           </>
         ) : (
-          <div className="flex-1 flex items-center justify-center">
-            <div className="text-center">
-              <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4"
-                style={{ background: RG_DIM, border: `1px solid ${RG_BORDER}` }}>
-                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke={RG + '44'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-                </svg>
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ width: 60, height: 60, borderRadius: 16, background: 'var(--bg-raised)', border: '1px solid var(--border-accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--red-deep)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>
               </div>
-              <p className="text-white font-semibold">CIPHERCHAT</p>
-              <p className="text-xs mt-2 tracking-widest" style={{ color: RG + '33' }}>SELECT A USER TO BEGIN ENCRYPTED CHAT</p>
+              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: 0, marginBottom: 8 }}>
+                <span className="logo-text-cipher" style={{ fontSize: 18 }}>CIPHER</span>
+                <span className="logo-text-chat" style={{ fontSize: 18 }}>CHAT</span>
+              </div>
+              <p style={{ fontSize: 10, letterSpacing: 2, color: 'var(--text-muted)', fontFamily: "'Space Mono', monospace" }}>SELECT A USER TO BEGIN ENCRYPTED CHAT</p>
             </div>
           </div>
         )}
