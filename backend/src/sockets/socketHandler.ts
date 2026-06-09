@@ -69,10 +69,68 @@ export const initializeSocket = (io: Server) => {
     });
 
     // ════════════════════════════════════════════════
-    // ─── WebRTC CALLING (Real-time) ─────────────────
+    // ─── REACTIONS (NEW) ─────────────────────────────
     // ════════════════════════════════════════════════
 
-    // Caller sends call-offer to callee
+    /**
+     * Client emits: { messageId, emoji, receiverId }
+     *
+     * Logic:
+     *  - Agar same user ne same emoji pehle react kiya → remove (toggle off)
+     *  - Warna → add
+     *
+     * Broadcast: dono users ko updated reactions array bhejo
+     */
+    socket.on('reactToMessage', async (data: {
+      messageId: string;
+      emoji: string;
+      receiverId: string;
+    }) => {
+      try {
+        const msg = await Message.findById(data.messageId);
+        if (!msg) return;
+
+        const existingIdx = msg.reactions.findIndex(
+          (r) => String(r.userId) === String(userId) && r.emoji === data.emoji
+        );
+
+        if (existingIdx !== -1) {
+          // Toggle off — same emoji, same user
+          msg.reactions.splice(existingIdx, 1);
+        } else {
+          // Add reaction
+          msg.reactions.push({
+            emoji: data.emoji,
+            userId: new (require('mongoose').Types.ObjectId)(userId),
+            username: socket.user.username,
+          });
+        }
+
+        await msg.save();
+
+        // Payload to broadcast
+        const payload = {
+          messageId: data.messageId,
+          reactions: msg.reactions,
+        };
+
+        // Send to receiver if online
+        const receiverSocketId = onlineUsers.get(data.receiverId);
+        if (receiverSocketId) {
+          io.to(receiverSocketId).emit('reactionUpdated', payload);
+        }
+        // Send back to sender too
+        socket.emit('reactionUpdated', payload);
+
+      } catch (error) {
+        socket.emit('error', { message: 'Failed to update reaction' });
+      }
+    });
+
+    // ════════════════════════════════════════════════
+    // ─── WebRTC CALLING ──────────────────────────────
+    // ════════════════════════════════════════════════
+
     socket.on('call:offer', (data: {
       toUserId: string;
       offer: any;
@@ -88,51 +146,31 @@ export const initializeSocket = (io: Server) => {
           callType: data.callType,
         });
       } else {
-        // Target user is offline
         socket.emit('call:rejected', { reason: 'User is offline' });
       }
     });
 
-    // Callee accepts — sends answer back to caller
-    socket.on('call:answer', (data: {
-      toUserId: string;
-      answer: any;
-    }) => {
+    socket.on('call:answer', (data: { toUserId: string; answer: any }) => {
       const callerSocketId = onlineUsers.get(data.toUserId);
       if (callerSocketId) {
-        io.to(callerSocketId).emit('call:answered', {
-          fromUserId: userId,
-          answer: data.answer,
-        });
+        io.to(callerSocketId).emit('call:answered', { fromUserId: userId, answer: data.answer });
       }
     });
 
-    // ICE candidate exchange (both sides)
-    socket.on('call:ice-candidate', (data: {
-      toUserId: string;
-      candidate: any;
-    }) => {
+    socket.on('call:ice-candidate', (data: { toUserId: string; candidate: any }) => {
       const targetSocketId = onlineUsers.get(data.toUserId);
       if (targetSocketId) {
-        io.to(targetSocketId).emit('call:ice-candidate', {
-          fromUserId: userId,
-          candidate: data.candidate,
-        });
+        io.to(targetSocketId).emit('call:ice-candidate', { fromUserId: userId, candidate: data.candidate });
       }
     });
 
-    // Callee rejects call
     socket.on('call:reject', (data: { toUserId: string }) => {
       const callerSocketId = onlineUsers.get(data.toUserId);
       if (callerSocketId) {
-        io.to(callerSocketId).emit('call:rejected', {
-          fromUserId: userId,
-          reason: 'Call declined',
-        });
+        io.to(callerSocketId).emit('call:rejected', { fromUserId: userId, reason: 'Call declined' });
       }
     });
 
-    // Either side ends/hangs up
     socket.on('call:end', (data: { toUserId: string }) => {
       const targetSocketId = onlineUsers.get(data.toUserId);
       if (targetSocketId) {

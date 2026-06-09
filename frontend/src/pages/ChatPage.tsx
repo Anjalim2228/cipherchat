@@ -12,6 +12,13 @@ interface User {
   isOnline?: boolean;
 }
 
+// ── NEW: Reaction type ──────────────────────────────────────
+interface Reaction {
+  emoji: string;
+  userId: string;
+  username: string;
+}
+
 interface Message {
   _id: string;
   sender: { _id: string; username: string };
@@ -19,6 +26,7 @@ interface Message {
   message: string;
   createdAt: string;
   isRead: boolean;
+  reactions: Reaction[]; // ← NEW
 }
 
 type CallState = 'idle' | 'calling' | 'incoming' | 'connected';
@@ -45,6 +53,9 @@ const ICE_SERVERS = {
   ],
 };
 
+// ── NEW: Quick emojis for reaction picker ───────────────────
+const QUICK_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🔥'];
+
 const ChatPage = () => {
   const { user, token, logout } = useAuth();
   const navigate = useNavigate();
@@ -67,6 +78,9 @@ const ChatPage = () => {
     readReceipts: true,
     fontSize: 'medium',
   });
+
+  // ── NEW: hovered message id for emoji picker ────────────
+  const [hoveredMsgId, setHoveredMsgId] = useState<string | null>(null);
 
   const [callState, setCallState] = useState<CallState>('idle');
   const [callType, setCallType] = useState<'audio' | 'video'>('audio');
@@ -285,6 +299,14 @@ const ChatPage = () => {
 
       socket.on('call:rejected', () => cleanupCall());
       socket.on('call:ended', () => cleanupCall());
+
+      // ── NEW: reaction update listener ─────────────────────
+      socket.on('reactionUpdated', (data: { messageId: string; reactions: Reaction[] }) => {
+        setMessages(prev =>
+          prev.map(m => m._id === data.messageId ? { ...m, reactions: data.reactions } : m)
+        );
+      });
+
     }, 100);
 
     return () => clearTimeout(timer);
@@ -323,6 +345,24 @@ const ChatPage = () => {
       e.preventDefault();
       handleSendMessage();
     }
+  };
+
+  // ── NEW: Reaction helpers ───────────────────────────────
+  const groupReactions = (reactions: Reaction[]) => {
+    const map: Record<string, { count: number; users: string[] }> = {};
+    for (const r of reactions) {
+      if (!map[r.emoji]) map[r.emoji] = { count: 0, users: [] };
+      map[r.emoji].count++;
+      map[r.emoji].users.push(r.username);
+    }
+    return Object.entries(map);
+  };
+
+  const handleReact = (messageId: string, emoji: string, receiverId: string) => {
+    const socket = getSocket();
+    if (!socket) return;
+    socket.emit('reactToMessage', { messageId, emoji, receiverId });
+    setHoveredMsgId(null);
   };
 
   const formatTime = (d: string) => new Date(d).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -886,6 +926,69 @@ const ChatPage = () => {
           text-transform: uppercase;
           font-family: 'DM Mono', monospace;
         }
+
+        /* ══════════════════════════════════════════
+           REACTIONS — NEW STYLES
+        ══════════════════════════════════════════ */
+        .msg-outer {
+          position: relative;
+          display: inline-flex;
+          flex-direction: column;
+        }
+
+        .emoji-picker {
+          position: absolute;
+          bottom: calc(100% + 6px);
+          display: flex;
+          gap: 2px;
+          background: rgba(16, 23, 41, 0.97);
+          border: 1px solid var(--border-mid);
+          border-radius: 999px;
+          padding: 5px 8px;
+          box-shadow: var(--shadow-lg);
+          backdrop-filter: blur(16px);
+          z-index: 30;
+          animation: fadeUp 0.13s ease-out;
+          white-space: nowrap;
+        }
+        .sent .emoji-picker  { right: 0; }
+        .recv .emoji-picker  { left: 0; }
+
+        .emoji-btn {
+          font-size: 17px;
+          cursor: pointer;
+          border: none;
+          background: none;
+          padding: 3px 4px;
+          border-radius: 8px;
+          transition: transform 0.12s;
+          line-height: 1;
+        }
+        .emoji-btn:hover { transform: scale(1.3); }
+
+        .reactions-row {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 4px;
+          margin-top: 5px;
+        }
+        .reaction-chip {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          padding: 2px 8px 2px 6px;
+          border-radius: 999px;
+          background: rgba(255,255,255,0.05);
+          border: 1px solid var(--border);
+          font-size: 13px;
+          cursor: pointer;
+          transition: background 0.12s, border-color 0.12s;
+          user-select: none;
+          line-height: 1.6;
+        }
+        .reaction-chip:hover { background: rgba(139,92,246,0.18); border-color: rgba(139,92,246,0.30); }
+        .reaction-chip.mine  { border-color: rgba(139,92,246,0.42); background: rgba(139,92,246,0.16); }
+        .reaction-chip-count { font-size: 10px; color: var(--text-muted); font-family: 'DM Mono', monospace; font-weight: 600; }
       `}</style>
 
       {callState !== 'idle' && callPartner && (
@@ -1218,9 +1321,18 @@ const ChatPage = () => {
                     const prevMsg = msgs[idx - 1];
                     const isConsecutive = prevMsg && String(prevMsg.sender._id) === String(msg.sender._id);
                     const fontSize = settings.fontSize === 'small' ? '12px' : settings.fontSize === 'large' ? '15.5px' : '13.5px';
+                    const otherUserId = isSent ? msg.receiver._id : msg.sender._id;
+                    const msgReactions = msg.reactions || [];
 
                     return (
-                      <div key={msg._id} className={`msg-bubble msg-row ${isSent ? 'sent' : 'recv'}`} style={{ marginTop: isConsecutive ? 2 : 12 }}>
+                      <div
+                        key={msg._id}
+                        className={`msg-bubble msg-row ${isSent ? 'sent' : 'recv'}`}
+                        style={{ marginTop: isConsecutive ? 2 : 12 }}
+                        onMouseEnter={() => setHoveredMsgId(msg._id)}
+                        onMouseLeave={() => setHoveredMsgId(null)}
+                      >
+                        {/* Left avatar for received messages */}
                         {!isSent && (
                           <div style={{ width: 28, flexShrink: 0, alignSelf: 'flex-end' }}>
                             {!isConsecutive && (
@@ -1230,13 +1342,56 @@ const ChatPage = () => {
                             )}
                           </div>
                         )}
-                        <div className="msg-wrap" style={{ display: 'flex', flexDirection: 'column', alignItems: isSent ? 'flex-end' : 'flex-start' }}>
-                          <div className={isSent ? 'msg-sent' : 'msg-recv'} style={{ fontSize }}>
-                            {msg.message}
+
+                        {/* Message bubble + reactions */}
+                        <div className="msg-outer" style={{ alignItems: isSent ? 'flex-end' : 'flex-start' }}>
+
+                          {/* Emoji picker — shows on hover */}
+                          {hoveredMsgId === msg._id && (
+                            <div className="emoji-picker">
+                              {QUICK_EMOJIS.map(e => (
+                                <button
+                                  key={e}
+                                  className="emoji-btn"
+                                  title={e}
+                                  onClick={() => handleReact(msg._id, e, otherUserId)}
+                                >
+                                  {e}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+
+                          <div className="msg-wrap" style={{ display: 'flex', flexDirection: 'column', alignItems: isSent ? 'flex-end' : 'flex-start' }}>
+                            <div className={isSent ? 'msg-sent' : 'msg-recv'} style={{ fontSize }}>
+                              {msg.message}
+                            </div>
+                            <p className="msg-time" style={{ textAlign: isSent ? 'right' : 'left' }}>
+                              {formatTime(msg.createdAt)}
+                            </p>
                           </div>
-                          <p className="msg-time" style={{ textAlign: isSent ? 'right' : 'left' }}>
-                            {formatTime(msg.createdAt)}
-                          </p>
+
+                          {/* Reaction chips */}
+                          {msgReactions.length > 0 && (
+                            <div className="reactions-row">
+                              {groupReactions(msgReactions).map(([emoji, { count, users }]) => {
+                                const isMine = msgReactions.some(
+                                  r => r.emoji === emoji && String(r.userId) === String(currentUserId)
+                                );
+                                return (
+                                  <button
+                                    key={emoji}
+                                    className={`reaction-chip${isMine ? ' mine' : ''}`}
+                                    title={users.join(', ')}
+                                    onClick={() => handleReact(msg._id, emoji, otherUserId)}
+                                  >
+                                    {emoji}
+                                    <span className="reaction-chip-count">{count}</span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
                         </div>
                       </div>
                     );
@@ -1294,3 +1449,4 @@ const ChatPage = () => {
 };
 
 export default ChatPage;
+

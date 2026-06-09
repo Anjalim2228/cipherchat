@@ -1,14 +1,31 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
+// ─── Reaction sub-type ──────────────────────────────
+export interface IReaction {
+  emoji: string;
+  userId: mongoose.Types.ObjectId;
+  username: string;
+}
+
 export interface IMessage extends Document {
   sender: mongoose.Types.ObjectId;
-  receiver?: mongoose.Types.ObjectId;   // null for group messages
-  group?: mongoose.Types.ObjectId;      // null for direct messages
+  receiver?: mongoose.Types.ObjectId;
+  group?: mongoose.Types.ObjectId;
   message: string;
   messageType: 'text' | 'image' | 'file';
   isRead: boolean;
+  reactions: IReaction[];   // ← NEW
   createdAt: Date;
 }
+
+const ReactionSchema = new Schema<IReaction>(
+  {
+    emoji:    { type: String, required: true },
+    userId:   { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    username: { type: String, required: true },
+  },
+  { _id: false }
+);
 
 const MessageSchema = new Schema<IMessage>(
   {
@@ -40,6 +57,11 @@ const MessageSchema = new Schema<IMessage>(
     isRead: {
       type: Boolean,
       default: false,
+    },
+    // ─── NEW: reactions array ─────────────────────
+    reactions: {
+      type: [ReactionSchema],
+      default: [],
     },
   },
   { timestamps: true }
